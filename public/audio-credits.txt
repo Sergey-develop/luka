@@ -1,0 +1,23 @@
+Audio attribution
+
+stadium.ogg: noise#01.aif by huubjeroen
+Source: https://freesound.org/people/huubjeroen/sounds/39733/
+License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
+Recording of a Feyenoord match at De Kuip stadium, Rotterdam.
+Changes: HQ preview excerpt 122-184s, slow attenuation of louder passages, 2s loop crossfade, Ogg conversion.
+
+Additional recordings (CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/):
+kick: 0.550s, https://freesound.org/people/musita182/sounds/261267/, CC0, trimmed/normalized/faded/converted from HQ preview
+click: 0.140s, https://freesound.org/people/FOSSarts/sounds/740266/, CC0, trimmed, transient compression, RMS adjustment, fades and Ogg conversion from HQ preview
+The goalkeeper impact uses a quieter, lower-pitched version of kick.ogg.
+
+goal-crowd.mp3: goalloop.wav by huubjeroen
+Source: https://freesound.org/people/huubjeroen/sounds/113698/
+License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
+Unmodified HQ MP3 preview. Playback gain and fades applied by the game.
+
+miss.mp3: supplied by the project owner as промах.mp3. Copied unchanged; playback volume and fades applied by the game.
+
+miss-reaction.ogg: excerpt 3.60-6.65 seconds (including the natural decay) from the user-supplied промах.mp3. Peak attenuation to prevent clipping, short edge fades, Ogg conversion. Original source file preserved.
+
+goal-crowd-balanced.ogg and miss-balanced.ogg: derivatives of the corresponding sources above, loudness-matched to -20.00 LUFS including playback fades and stereo rendering. Original sources preserved.

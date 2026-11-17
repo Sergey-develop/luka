@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.idea/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example
+/*.png
+/*.mp3
+/testvisual.mjs
+/.check-*
+*.log

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    const probe: { contexts: AudioContext[]; output?: AnalyserNode; peak: number; stops: { loop: boolean; duration: number; delay: number }[]; starts: { loop: boolean; buffer: AudioBuffer | null }[] } = { contexts: [], peak: 0, stops: [], starts: [] }
+    const probe: { contexts: AudioContext[]; output?: AnalyserNode; peak: number; stops: { loop: boolean; duration: number; delay: number }[]; starts: { loop: boolean; buffer: AudioBuffer | null; offset: number }[] } = { contexts: [], peak: 0, stops: [], starts: [] }
     ;(window as unknown as { audioProbe: typeof probe }).audioProbe = probe
     const NativeContext = window.AudioContext
     window.AudioContext = class extends NativeContext {
@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
     }
     const start = AudioBufferSourceNode.prototype.start
     AudioBufferSourceNode.prototype.start = function (...args: Parameters<typeof start>) {
-      probe.starts.push({ loop: this.loop, buffer: this.buffer })
+      probe.starts.push({ loop: this.loop, buffer: this.buffer, offset: args[1] ?? 0 })
       return start.apply(this, args)
     }
     const stop = AudioBufferSourceNode.prototype.stop
@@ -52,15 +52,15 @@ test('stadium is silent in menus and audio is always enabled after interaction',
   expect(await contexts()).toBe(0)
   await page.getByRole('button', { name: 'START GAME', exact: true }).click()
   await expect.poll(contexts).toBe(1)
-  // Let the short button click finish; there must be no ambient source in menus.
-  await page.waitForTimeout(400)
-  await expect.poll(level).toBeLessThan(.000001)
-  expect(await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean }[] } }).audioProbe.starts.some(s => s.loop))).toBe(false)
+  // Let the short button click finish; the song continues in menus, but the stadium must remain off.
+  await page.waitForTimeout(850)
+  await expect.poll(level).toBeGreaterThan(.00001)
+  expect(await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.some(s => s.loop && s.buffer.duration < 100))).toBe(false)
   await page.getByRole('button', { name: 'CONTINUE', exact: true }).click()
   await page.getByRole('textbox', { name: 'CoinW UID' }).fill('123456')
   await page.getByRole('button', { name: 'START GAME', exact: true }).click()
   await expect.poll(level, { timeout: 10000 }).toBeGreaterThan(.00001)
-  const loopLength = await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.find(s => s.loop)?.buffer.duration ?? 0)
+  const loopLength = await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.find(s => s.loop && s.buffer.duration < 100)?.buffer.duration ?? 0)
   expect(loopLength).toBeGreaterThanOrEqual(55)
   // A visibility change must not suspend audio or stop the stadium loop.
   await page.evaluate(() => {
@@ -68,7 +68,7 @@ test('stadium is silent in menus and audio is always enabled after interaction',
     document.dispatchEvent(new Event('visibilitychange'))
   })
   await page.waitForTimeout(300)
-  const stoppedLoops = await page.evaluate(() => (window as unknown as { audioProbe: { stops: { loop: boolean }[] } }).audioProbe.stops.filter(stop => stop.loop).length)
+  const stoppedLoops = await page.evaluate(() => (window as unknown as { audioProbe: { stops: { loop: boolean; duration: number }[] } }).audioProbe.stops.filter(stop => stop.loop && stop.duration < 100).length)
   // Read AudioContext state in the page because it cannot be serialized.
   expect(await page.evaluate(() => (window as unknown as { audioProbe: { contexts: AudioContext[] } }).audioProbe.contexts[0].state)).toBe('running')
   expect(stoppedLoops).toBe(0)
@@ -80,16 +80,16 @@ test('stadium is silent in menus and audio is always enabled after interaction',
   const home = page.getByRole('button', { name: 'Home', exact: true })
   await expect(home).toBeEnabled({ timeout: 6000 })
   await home.click()
-  await page.waitForTimeout(500)
-  await expect.poll(level).toBeLessThan(.000001)
+  await page.waitForTimeout(1000)
+  await expect.poll(level).toBeGreaterThan(.00001)
   await expect(page.getByRole('button', { name: 'Sound', exact: true })).toHaveCount(0)
   // Old saved mute preferences must no longer silence the kiosk.
   await page.evaluate(() => localStorage.setItem('coinw-football-muted', 'true'))
   await page.reload()
   await page.getByRole('button', { name: 'START GAME', exact: true }).click()
   await expect.poll(contexts).toBe(1)
-  await page.waitForTimeout(400)
-  await expect.poll(level).toBeLessThan(.000001)
+  await page.waitForTimeout(850)
+  await expect.poll(level).toBeGreaterThan(.00001)
 })
 
 
@@ -136,7 +136,7 @@ test('menu clicks are audible immediately after preload', async ({ page }) => {
   await resetPeak()
   await page.getByRole('button', { name: 'BACK', exact: true }).click()
   await expect.poll(peak).toBeGreaterThan(.02)
-  const loops = await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean }[] } }).audioProbe.starts.filter(s => s.loop).length)
+  const loops = await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.filter(s => s.loop && s.buffer.duration < 100).length)
   expect(loops).toBe(0)
 })
 
@@ -188,7 +188,45 @@ test.describe('mobile playback', () => {
     await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('123456')
     await page.getByRole('button', { name: 'START GAME', exact: true }).tap()
     await expect.poll(() => page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean }[] } }).audioProbe.starts.some(s => s.loop))).toBe(true)
-    expect(audioRequests.length).toBe(5)
+    expect(audioRequests.length).toBe(6)
     expect(audioRequests.every(url => url.endsWith('.mp3'))).toBe(true)
   })
+})
+
+
+test('the song continues across all non-game screens and resumes after the match', async ({ page }) => {
+  test.setTimeout(60000)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'START GAME', exact: true })).toBeVisible()
+  await page.getByRole('heading', { level: 1 }).click()
+  const musicCount = () => page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.filter(s => s.loop && s.buffer.duration > 180).length)
+  await expect.poll(musicCount).toBe(1)
+  await page.getByRole('button', { name: 'START GAME', exact: true }).click()
+  expect(await musicCount()).toBe(1)
+  await page.getByRole('button', { name: 'CONTINUE', exact: true }).click()
+  await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('123456')
+  expect(await musicCount()).toBe(1)
+  expect(await page.evaluate(() => (window as unknown as { audioProbe: { stops: { loop: boolean; duration: number }[] } }).audioProbe.stops.some(s => s.loop && s.duration > 180))).toBe(false)
+  await page.getByRole('button', { name: 'START GAME', exact: true }).click()
+  const fade = await page.evaluate(() => (window as unknown as { audioProbe: { stops: { loop: boolean; duration: number; delay: number }[] } }).audioProbe.stops.find(s => s.loop && s.duration > 180)?.delay)
+  expect(fade).toBeGreaterThan(.6)
+  expect(fade).toBeLessThanOrEqual(.67)
+  for (let shot = 0; shot < 5; shot++) {
+    await expect(page.locator('.ball-control')).toBeEnabled({ timeout: 6000 })
+    expect(await musicCount()).toBe(1)
+    await page.locator('.ball-control').press('Enter')
+    await expect(page.getByRole('status').getByText('SAVED', { exact: true })).toBeVisible()
+  }
+  await expect(page.getByRole('heading', { name: 'Your result', exact: true })).toBeVisible()
+  await expect.poll(musicCount).toBe(2)
+  expect(await page.evaluate(() => {
+    const music = (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer; offset: number }[] } }).audioProbe.starts.filter(s => s.loop && s.buffer.duration > 180)
+    return music[0].buffer === music[1].buffer && music[1].offset > 0
+  })).toBe(true)
+  await page.getByRole('button', { name: 'VIEW LEADERBOARD', exact: true }).click()
+  await expect(page.getByRole('columnheader', { name: 'PLAYER' })).toBeVisible()
+  expect(await musicCount()).toBe(2)
+  await page.getByRole('button', { name: 'NEW GAME', exact: true }).click()
+  expect(await musicCount()).toBe(2)
 })

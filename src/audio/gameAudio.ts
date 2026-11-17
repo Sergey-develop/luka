@@ -3,9 +3,10 @@ import applauseUrl from '../assets/audio/goal-crowd-balanced.mp3'
 import booUrl from '../assets/audio/miss-balanced.mp3'
 import kickUrl from '../assets/audio/kick.mp3'
 import clickUrl from '../assets/audio/click.mp3'
+import musicUrl from '../assets/audio/menu-theme.mp3'
 import type { Outcome } from '../types/game'
 
-const soundUrls = { stadium: stadiumUrl, applause: applauseUrl, boo: booUrl, kick: kickUrl, click: clickUrl }
+const soundUrls = { stadium: stadiumUrl, applause: applauseUrl, boo: booUrl, kick: kickUrl, click: clickUrl, music: musicUrl }
 type SoundName = keyof typeof soundUrls
 
 class GameAudio {
@@ -13,12 +14,17 @@ class GameAudio {
   private master?: GainNode
   private ambience?: GainNode
   private crowd?: AudioBufferSourceNode
-  private buffers: Partial<Record<'stadium' | 'applause' | 'boo' | 'kick' | 'click', AudioBuffer>> = {}
+  private buffers: Partial<Record<SoundName, AudioBuffer>> = {}
   private voices = new Set<AudioScheduledSourceNode>()
   private uiVoices = new Set<AudioScheduledSourceNode>()
   private envelopes = new Map<AudioScheduledSourceNode, { gain: GainNode; endsAt: number; crowd: boolean }>()
   private fading = new WeakSet<AudioScheduledSourceNode>()
   private reaction?: AudioBufferSourceNode
+  private menuActive = false
+  private musicOffset = 0
+  private musicStartedAt = 0
+  private menuMusic?: AudioBufferSourceNode
+  private menuGain?: GainNode
   private active = false
   private disposed = false
   private clickLoading?: Promise<void>
@@ -60,10 +66,13 @@ class GameAudio {
         limiter.threshold.value = -12
         limiter.ratio.value = 6
         this.master.connect(limiter).connect(this.context.destination)
-        this.clickLoading = this.loadClick()
-        void this.loadSounds()
+        // Reuse the startup decoder even if the first tap happens while loading.
+        const prepared = this.preloading ?? Promise.resolve()
+        this.clickLoading = prepared.then(() => this.loadClick(), () => this.loadClick())
+        void prepared.catch(() => {}).then(() => this.loadSounds())
       }
       if (this.context.state !== 'running' && this.context.state !== 'closed') await this.context.resume()
+      this.syncMenuMusic()
     } catch { /* Audio must never prevent playing the game. */ }
   }
 
@@ -83,7 +92,7 @@ class GameAudio {
 
   private async loadSounds() {
     const context = this.context!
-    await Promise.allSettled((['stadium', 'applause', 'boo', 'kick'] as const).map(async name => {
+    await Promise.allSettled((['stadium', 'applause', 'boo', 'kick', 'music'] as const).map(async name => {
       if (!this.buffers[name]) {
         const data = await this.download(name)
         const buffer = await context.decodeAudioData(data.slice(0))
@@ -91,7 +100,44 @@ class GameAudio {
         this.buffers[name] = buffer
       }
       if (name === 'stadium') this.syncCrowd()
+      if (name === 'music') this.syncMenuMusic()
     }))
+  }
+
+  setMenuMusic(active: boolean) {
+    this.menuActive = active
+    this.syncMenuMusic()
+  }
+
+  private syncMenuMusic() {
+    if (!this.menuActive) {
+      const music = this.menuMusic
+      const gain = this.menuGain
+      this.menuMusic = undefined
+      this.menuGain = undefined
+      if (music && gain && this.context) {
+        const now = this.context.currentTime
+        this.musicOffset = (this.musicOffset + now - this.musicStartedAt + .65) % music.buffer!.duration
+        gain.gain.cancelAndHoldAtTime(now)
+        gain.gain.linearRampToValueAtTime(0, now + .65)
+        music.stop(now + .66)
+      }
+      return
+    }
+    if (this.menuMusic || !this.canPlay() || !this.buffers.music) return
+    const context = this.context!
+    const music = context.createBufferSource()
+    const gain = context.createGain()
+    music.buffer = this.buffers.music
+    music.loop = true
+    gain.gain.setValueAtTime(0, context.currentTime)
+    gain.gain.linearRampToValueAtTime(.18, context.currentTime + 1)
+    music.connect(gain).connect(this.master!)
+    music.onended = () => { music.disconnect(); gain.disconnect() }
+    this.menuMusic = music
+    this.menuGain = gain
+    this.musicStartedAt = context.currentTime
+    music.start(0, this.musicOffset)
   }
 
   private syncCrowd() {
@@ -237,6 +283,7 @@ class GameAudio {
     document.removeEventListener('visibilitychange', this.onVisibility)
     this.stopEffects(true, true)
     this.crowd?.stop()
+    this.menuMusic?.stop()
     void this.context?.close().catch(() => {})
   }
 }

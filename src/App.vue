@@ -71,6 +71,8 @@ watch(() => engine.phase, (phase) => {
   if (phase === 'countdown' && sceneReady.value) countdownFrame = requestAnimationFrame(updateCountdown)
 }, { flush: 'sync' })
 
+watch(() => bootReady.value && !playing.value, active => gameAudio.setMenuMusic(active), { immediate: true, flush: 'sync' })
+
 function sceneLoaded() {
   sceneReady.value = true
   if (engine.phase === 'countdown') {

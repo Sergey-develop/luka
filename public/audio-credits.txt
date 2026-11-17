@@ -23,3 +23,5 @@ miss-reaction.ogg: excerpt 3.60-6.65 seconds (including the natural decay) from 
 goal-crowd-balanced.ogg and miss-balanced.ogg: derivatives of the corresponding sources above, loudness-matched to -20.00 LUFS including playback fades and stereo rendering. Original sources preserved.
 
 Mobile playback: stadium.mp3, goal-crowd-balanced.mp3, miss-balanced.mp3, kick.mp3 and click.mp3 are MP3 encodings of the processed Ogg files above, for iOS and embedded browser compatibility. Same sources, edits, levels and licenses apply.
+
+menu-theme.mp3: supplied by the project owner as main theme.mp3 (Hypnotic Arena). Full track retained; artwork removed and encoded as 128 kbps MP3 for web delivery. Playback volume, looping and entry/exit fades applied by the game.

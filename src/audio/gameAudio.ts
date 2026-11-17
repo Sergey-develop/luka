@@ -5,6 +5,9 @@ import kickUrl from '../assets/audio/kick.mp3'
 import clickUrl from '../assets/audio/click.mp3'
 import type { Outcome } from '../types/game'
 
+const soundUrls = { stadium: stadiumUrl, applause: applauseUrl, boo: booUrl, kick: kickUrl, click: clickUrl }
+type SoundName = keyof typeof soundUrls
+
 class GameAudio {
   private context?: AudioContext
   private master?: GainNode
@@ -19,7 +22,27 @@ class GameAudio {
   private active = false
   private disposed = false
   private clickLoading?: Promise<void>
-  private clickData?: Promise<ArrayBuffer | undefined>
+  private downloads: Partial<Record<SoundName, Promise<ArrayBuffer>>> = {}
+  private preloading?: Promise<void>
+
+  private download(name: SoundName): Promise<ArrayBuffer> {
+    return this.downloads[name] ??= fetch(soundUrls[name]).then(response => {
+      if (!response.ok) throw new Error('Audio unavailable')
+      return response.arrayBuffer()
+    }).catch(error => { delete this.downloads[name]; throw error })
+  }
+
+  preload(): Promise<void> {
+    return this.preloading ??= (async () => {
+      // Decode ahead of time without opening or playing a live audio session.
+      const decoder = new OfflineAudioContext(2, 1, 44100)
+      await Promise.all((Object.keys(soundUrls) as SoundName[]).map(async name => {
+        const data = await this.download(name)
+        const buffer = await decoder.decodeAudioData(data.slice(0))
+        if (!this.disposed) this.buffers[name] = buffer
+      }))
+    })().catch(error => { this.preloading = undefined; throw error })
+  }
 
   async unlock() {
     if (this.disposed) return
@@ -45,30 +68,28 @@ class GameAudio {
   }
 
   private preloadClick() {
-    this.clickData ??= fetch(clickUrl)
-      .then(response => response.ok ? response.arrayBuffer() : undefined)
-      .catch(() => undefined)
-    return this.clickData
+    return this.download('click').catch(() => undefined)
   }
 
   private async loadClick() {
+    if (this.buffers.click) return
     try {
       const data = await this.preloadClick()
       if (!data || this.disposed) return
-      const buffer = await this.context!.decodeAudioData(data)
+      const buffer = await this.context!.decodeAudioData(data.slice(0))
       if (!this.disposed) this.buffers.click = buffer
     } catch { /* Optional sound must not block navigation. */ }
   }
 
   private async loadSounds() {
     const context = this.context!
-    const urls = { stadium: stadiumUrl, applause: applauseUrl, boo: booUrl, kick: kickUrl }
-    await Promise.allSettled(Object.entries(urls).map(async ([name, url]) => {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error('Audio unavailable')
-      const buffer = await context.decodeAudioData(await response.arrayBuffer())
-      if (this.disposed) return
-      this.buffers[name as keyof typeof urls] = buffer
+    await Promise.allSettled((['stadium', 'applause', 'boo', 'kick'] as const).map(async name => {
+      if (!this.buffers[name]) {
+        const data = await this.download(name)
+        const buffer = await context.decodeAudioData(data.slice(0))
+        if (this.disposed) return
+        this.buffers[name] = buffer
+      }
       if (name === 'stadium') this.syncCrowd()
     }))
   }

@@ -118,9 +118,7 @@ test('a kick uses a recording and goal and miss trigger different crowd recordin
 })
 
 
-test('menu clicks are audible without waiting for stadium files', async ({ page }) => {
-  // A stalled crowd download must never delay or suppress a menu click.
-  await page.route('**/assets/audio/stadium.mp3', route => route.abort())
+test('menu clicks are audible immediately after preload', async ({ page }) => {
   await page.goto('/')
   const resetPeak = () => page.evaluate(() => { (window as unknown as { audioProbe: { peak: number } }).audioProbe.peak = 0 })
   const peak = () => page.evaluate(() => (window as unknown as { audioProbe: { peak: number } }).audioProbe.peak)

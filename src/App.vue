@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { gameAudio } from './audio/gameAudio'
+import { preloadGame } from './preload'
 import KioskScreens from './components/KioskScreens.vue'
 import GameScene from './game/rendering/GameScene.vue'
 import { GameEngine } from './game/engine'
@@ -13,6 +14,24 @@ const repository = new LocalResultsRepository()
 const { timing } = gameConfig
 const shot = ref<(Shot & { id: number }) | null>(null)
 const sceneReady = ref(false)
+const assetsReady = ref(false)
+const assetProgress = ref(0)
+const loadFailed = ref(false)
+const loadAttempt = ref(0)
+const bootReady = computed(() => sceneReady.value && assetsReady.value)
+const loadingProgress = computed(() => Math.floor(assetProgress.value * 90 + (sceneReady.value ? 10 : 0)))
+const playing = computed(() => ['countdown', 'aiming', 'shooting', 'shot-result'].includes(engine.phase))
+async function prepareGame(retry = false) {
+  if (retry) { sceneReady.value = false; loadAttempt.value++ }
+  assetsReady.value = false
+  loadFailed.value = false
+  assetProgress.value = 0
+  const attempt = loadAttempt.value
+  try {
+    await preloadGame(progress => { if (attempt === loadAttempt.value) assetProgress.value = progress })
+    if (attempt === loadAttempt.value) assetsReady.value = true
+  } catch { if (attempt === loadAttempt.value) loadFailed.value = true }
+}
 const countdownRemainingMs = ref(0)
 const countdown = computed(() => engine.phase === 'countdown'
   ? Math.max(1, Math.ceil(countdownRemainingMs.value / 1000)) : null)
@@ -111,6 +130,7 @@ function tick() {
 
 onMounted(() => {
   gameAudio.mount()
+  void prepareGame()
   window.addEventListener('pointerdown', noteActivity)
   window.addEventListener('keydown', noteActivity)
   window.addEventListener('input', noteActivity)
@@ -128,7 +148,6 @@ onBeforeUnmount(() => {
 })
 
 function clearRound() {
-  sceneReady.value = false
   roundToken++
   requestId++
   shot.value = null
@@ -234,6 +253,10 @@ function register(player: Player) {
 <template>
   <KioskScreens
     :screen="engine.phase"
+    :loading="!bootReady"
+    :loading-progress="loadingProgress"
+    :load-failed="loadFailed"
+    @retry="prepareGame(true)"
     :score="engine.score"
     :goals="engine.goals"
     :shots="engine.shots.length"
@@ -255,6 +278,8 @@ function register(player: Player) {
     @leaderboard="showLeaderboard"
   >
     <GameScene
+      :key="loadAttempt"
+      :active="playing"
       :shot="shot"
       :countdown="countdown"
       :countdown-progress="countdownRemainingMs / timing.countdownMs"
@@ -264,6 +289,7 @@ function register(player: Player) {
       :goals="engine.goals"
       :shots="engine.shots.length"
       @ready="sceneLoaded"
+      @load-error="loadFailed = true"
       @swipe="fire"
       @complete="complete"
       @home="home"

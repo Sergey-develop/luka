@@ -253,23 +253,28 @@ test('countdown ring and digits share the same three-second clock', async ({ pag
 })
 
 
-test('slow game assets do not consume the countdown or the playing time', async ({ page }) => {
+test('slow game assets hold the initial loader without consuming playing time', async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   let release!: () => void
   const hold = new Promise<void>(resolve => { release = resolve })
-  await page.route('**/keeper-idle-clean.png', async route => {
-    await hold
-    await route.continue()
-  })
-  await page.clock.install()
-  await openGame(page)
-  await expect(page.getByText('LOADING GAME…', { exact: true })).toBeVisible()
+  await page.route('**/keeper-idle-clean.png', async route => { await hold; await route.continue() })
+  const startTime = new Date('2026-11-17T12:00:00Z')
+  await page.clock.install({ time: startTime })
+  await page.clock.pauseAt(startTime)
+  await page.goto('/')
+  await expect(page.getByRole('progressbar', { name: 'Game loading' })).toBeVisible()
+  await expect(play(page)).toHaveCount(0)
   await page.clock.fastForward(30000)
-  await expect(page.getByText('LOADING GAME…', { exact: true })).toBeVisible()
-  await expect(page.locator('.ball-control')).toBeDisabled()
-  await expect(page.locator('.game-clock')).toContainText('20s')
+  await expect(page.getByRole('progressbar')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('startup-loader.png') })
   release()
+  await expect(play(page)).toBeVisible({ timeout: 10000 })
+  await play(page).click()
+  await continueButton(page).click()
+  await page.getByRole('textbox', { name: /CoinW UID/i }).fill('123456')
+  await start(page).click()
   await expect(page.locator('.game-countdown strong')).toHaveText('3')
   await page.clock.runFor(3100)
   await expect(ball(page)).toBeEnabled()
+  await expect(page.locator('.game-clock')).toContainText('20s')
 })

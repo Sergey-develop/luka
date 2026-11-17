@@ -1231,3 +1231,29 @@ input:focus-visible { outline: 2px solid #e7dbff; outline-offset: 2px; }
   .result-rank > small { font-size: 2.3cqw; }
 }
 @media (prefers-reduced-motion: reduce) { .language-switch button { transition: none; } }
+
+.startup-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 45%, #6531dd, #2b188d 65%, #160a50);
+  text-align: center;
+  .startup-logo { position: absolute; top: 6%; width: 27%; height: 5%; background: url('../assets/art/logo.webp') center / contain no-repeat; }
+  .startup-content { width: 80%; }
+  h1 { font-size: 7cqw; line-height: 1.1; margin: 0 0 3cqw; }
+  p { font-size: 3.6cqw; line-height: 1.4; color: #e0d1ff; }
+  strong { display: block; margin-top: 3cqw; font-size: 5cqw; font-variant-numeric: tabular-nums; }
+  button { min-height: 12cqw; width: 100%; margin-top: 6cqw; }
+}
+.startup-progress {
+  height: 2.1cqw;
+  margin-top: 7cqw;
+  border-radius: 2cqw;
+  overflow: hidden;
+  background: #17093c80;
+  box-shadow: inset 0 0 0 .2cqw #ffffff30;
+  i { display: block; width: 100%; height: 100%; transform-origin: left; background: linear-gradient(90deg, #b195ff, #fff); transition: transform 150ms linear; }
+}
+@media (prefers-reduced-motion: reduce) { .startup-progress i { transition: none; } }

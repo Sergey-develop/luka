@@ -21,6 +21,9 @@ interface Entry {
 
 const props = withDefaults(defineProps<{
   screen: string
+  loading?: boolean
+  loadingProgress?: number
+  loadFailed?: boolean
   score?: number
   goals?: number
   shots?: number
@@ -33,6 +36,9 @@ const props = withDefaults(defineProps<{
   timedOut?: boolean
   timeoutSeconds?: number | null
 }>(), {
+  loading: false,
+  loadingProgress: 0,
+  loadFailed: false,
   score: 0,
   goals: 0,
   shots: 0,
@@ -47,6 +53,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
+  retry: []
   start: []
   back: []
   register: [value: { uid: string; nickname?: string; email?: string }]
@@ -157,14 +164,14 @@ function submit() {
 
 <template>
   <main class="kiosk" :lang="locale" @contextmenu.prevent>
-    <div class="language-switch" :class="{ 'language-switch--game': currentScreen === 'game' }" role="group" :aria-label="t('Game language')" :inert="timedOut">
+    <div class="language-switch" :class="{ 'language-switch--game': currentScreen === 'game' }" role="group" :aria-label="t('Game language')" :inert="timedOut || loading" :aria-hidden="timedOut || loading">
       <button type="button" :aria-label="locale === 'en' ? 'Переключить на русский' : 'Switch to English'"
         @click="setLocale(locale === 'en' ? 'ru' : 'en')">
         <img :src="locale === 'en' ? languageEn : languageRu" alt="" draggable="false">
       </button>
     </div>
     <Transition name="screen" @before-leave="disableLeavingScreen">
-    <div :key="currentScreen" class="kiosk-content" :class="'screen-' + currentScreen" :inert="timedOut">
+    <div :key="currentScreen" class="kiosk-content" :class="'screen-' + currentScreen" :inert="timedOut || loading" :aria-hidden="timedOut || loading">
       <div v-if="currentScreen !== 'game'" class="coinw-logo" role="img" aria-label="CoinW"></div>
 
       <template v-if="currentScreen === 'idle'">
@@ -351,9 +358,29 @@ function submit() {
         </div>
       </template>
 
-      <slot v-else-if="currentScreen === 'game'" />
+
     </div>
     </Transition>
+
+    <Transition name="screen">
+      <div v-show="currentScreen === 'game'" class="kiosk-content screen-game"
+        :inert="currentScreen !== 'game' || timedOut || loading" :aria-hidden="currentScreen !== 'game' || timedOut || loading">
+        <slot />
+      </div>
+    </Transition>
+
+    <div v-if="loading" class="startup-loader" :aria-busy="!loadFailed" role="status">
+      <div class="startup-logo" role="img" aria-label="CoinW"></div>
+      <div class="startup-content">
+        <h1>{{ t(loadFailed ? 'COULD NOT LOAD THE GAME' : 'PREPARING YOUR GAME') }}</h1>
+        <p>{{ t(loadFailed ? 'Check your connection and try again.' : 'Loading everything for a smooth game.') }}</p>
+        <div v-if="!loadFailed" class="startup-progress" role="progressbar" :aria-label="t('Game loading')" :aria-valuenow="loadingProgress" aria-valuemin="0" aria-valuemax="100">
+          <i :style="{ transform: `scaleX(${loadingProgress / 100})` }"></i>
+        </div>
+        <strong v-if="!loadFailed">{{ loadingProgress }}%</strong>
+        <button v-else type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('retry')"><span>{{ t('TRY AGAIN') }}</span></button>
+      </div>
+    </div>
 
     <div v-if="timedOut" class="timeout-overlay">
       <section class="timeout-panel" role="alertdialog" aria-modal="true" aria-labelledby="timeout-title" aria-describedby="timeout-description">

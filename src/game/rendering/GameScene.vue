@@ -17,6 +17,7 @@ import type { Outcome, Shot, Swipe } from '../../types/game'
 type AnimatedShot = Shot & { id: number }
 
 const props = defineProps<{
+  active: boolean
   shot: AnimatedShot | null
   disabled: boolean
   score: number
@@ -26,7 +27,7 @@ const props = defineProps<{
   countdownProgress: number
   secondsLeft: number
 }>()
-const emit = defineEmits<{ swipe: [gesture: Swipe]; complete: []; home: []; ready: [] }>()
+const emit = defineEmits<{ swipe: [gesture: Swipe]; complete: []; home: []; ready: []; loadError: [] }>()
 
 const scene = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement | null>(null)
@@ -109,7 +110,7 @@ function restKeeper() {
   idle.rotation = 0
   idle.width = 180
   idle.height = 180
-  if (!reducedMotion()) keeperRest = gsap.to(idle, { y: 452, rotation: .012, duration: .85, repeat: -1, yoyo: true, ease: 'sine.inOut' })
+  if (props.active && !reducedMotion()) keeperRest = gsap.to(idle, { y: 452, rotation: .012, duration: .85, repeat: -1, yoyo: true, ease: 'sine.inOut' })
 }
 
 function moveSwipe(event: PointerEvent) {
@@ -216,7 +217,7 @@ function shootWithKeyboard(event: MouseEvent) {
 
 async function init() {
   const instance = new Application()
-  const screenScale = (scene.value?.clientWidth || stageWidth) / stageWidth
+  const screenScale = (scene.value?.clientWidth || scene.value?.closest('.kiosk')?.clientWidth || stageWidth) / stageWidth
   const resolution = Math.max(1, Math.min(2, screenScale * (window.devicePixelRatio || 1)))
   try {
     await instance.init({
@@ -261,10 +262,12 @@ async function init() {
     instance.stage.addChild(bg, idle, dive, shadow, trail, ball)
     restKeeper()
     host.value?.appendChild(instance.canvas)
+    instance.render()
+    if (!props.active) instance.stop()
     ready.value = true
     emit('ready')
   } catch {
-    if (!destroyed) loadFailed.value = true
+    if (!destroyed) { loadFailed.value = true; emit('loadError') }
   }
 }
 
@@ -391,6 +394,27 @@ function animate(shot: AnimatedShot) {
 }
 
 onMounted(init)
+watch(() => props.active, active => {
+  if (active) {
+    app?.start()
+    restKeeper()
+    return
+  }
+  timeline?.kill()
+  resetGesture()
+  tensionTween?.kill()
+  result.value = null
+  swipeHint.value = ''
+  keyboardDirection.value = 0
+  keyboardHeight.value = 0
+  keyboardAiming.value = false
+  if (ball) { resetBall(ball); ball.alpha = 1 }
+  if (idle) { idle.alpha = 1; restKeeper() }
+  if (dive) { dive.visible = false; dive.alpha = 0 }
+  trail?.clear()
+  if (shadow) { shadow.position.set(ballStart.x, ballStart.y + 60); shadow.scale.set(1); shadow.alpha = 1 }
+  app?.stop()
+})
 watch(enabled, (canShoot) => {
   if (canShoot) return
   resetGesture()

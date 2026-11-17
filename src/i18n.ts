@@ -15,6 +15,12 @@ export function setLocale(value: Locale) {
   try { localStorage.setItem(storageKey, value) } catch { /* Still switch if storage is unavailable. */ }
 }
 const russian: Record<string, string> = {
+  "PREPARING YOUR GAME": "ГОТОВИМ ИГРУ",
+  "COULD NOT LOAD THE GAME": "НЕ УДАЛОСЬ ЗАГРУЗИТЬ ИГРУ",
+  "Loading everything for a smooth game.": "Загружаем всё для игры без ожидания.",
+  "Check your connection and try again.": "Проверь соединение и попробуй ещё раз.",
+  "Game loading": "Загрузка игры",
+  "TRY AGAIN": "ПОВТОРИТЬ",
   "Football": "Футбольный",
   "Challenge": "челлендж",
   "LEADERBOARD": "РЕЙТИНГ",

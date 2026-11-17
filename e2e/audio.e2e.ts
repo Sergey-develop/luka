@@ -62,6 +62,21 @@ test('stadium is silent in menus and audio is always enabled after interaction',
   await expect.poll(level, { timeout: 10000 }).toBeGreaterThan(.00001)
   const loopLength = await page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean; buffer: AudioBuffer }[] } }).audioProbe.starts.find(s => s.loop)?.buffer.duration ?? 0)
   expect(loopLength).toBeGreaterThanOrEqual(55)
+  // A visibility change must not suspend audio or stop the stadium loop.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(300)
+  const stoppedLoops = await page.evaluate(() => (window as unknown as { audioProbe: { stops: { loop: boolean }[] } }).audioProbe.stops.filter(stop => stop.loop).length)
+  // Read AudioContext state in the page because it cannot be serialized.
+  expect(await page.evaluate(() => (window as unknown as { audioProbe: { contexts: AudioContext[] } }).audioProbe.contexts[0].state)).toBe('running')
+  expect(stoppedLoops).toBe(0)
+  await expect.poll(level).toBeGreaterThan(.00001)
+  await page.evaluate(() => {
+    Reflect.deleteProperty(document, 'hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
   const home = page.getByRole('button', { name: 'Home', exact: true })
   await expect(home).toBeEnabled({ timeout: 6000 })
   await home.click()

@@ -22,7 +22,7 @@ class GameAudio {
   private clickData?: Promise<ArrayBuffer | undefined>
 
   async unlock() {
-    if (this.disposed || document.hidden) return
+    if (this.disposed) return
     try {
       if (!this.context) {
         this.context = new AudioContext()
@@ -35,7 +35,7 @@ class GameAudio {
         this.clickLoading = this.loadClick()
         void this.loadSounds()
       }
-      if (this.context.state === 'suspended') await this.context.resume()
+      if (this.context.state !== 'running' && this.context.state !== 'closed') await this.context.resume()
     } catch { /* Audio must never prevent playing the game. */ }
   }
 
@@ -104,7 +104,7 @@ class GameAudio {
   }
 
   private canPlay() {
-    return !this.disposed && !document.hidden && this.context?.state === 'running'
+    return !this.disposed && this.context?.state === 'running'
   }
 
   private track(source: AudioScheduledSourceNode, gain: GainNode, endsAt: number, ui = false, crowd = false) {
@@ -189,10 +189,8 @@ class GameAudio {
     void this.unlock().then(() => this.clickLoading).then(() => this.click())
   }
   private onVisibility = () => {
-    if (document.hidden) {
-      this.stopEffects(true, true)
-      void this.context?.suspend().catch(() => {})
-    } else if (this.context) void this.unlock()
+    // Keep playing in background tabs; resume if the browser interrupted audio.
+    if (!document.hidden && this.context) void this.unlock()
   }
 
   mount() {

@@ -158,8 +158,10 @@ function submit() {
 <template>
   <main class="kiosk" :lang="locale" @contextmenu.prevent>
     <div class="language-switch" :class="{ 'language-switch--game': currentScreen === 'game' }" role="group" :aria-label="t('Game language')" :inert="timedOut">
-      <button type="button" aria-label="English" :aria-pressed="locale === 'en'" @click="setLocale('en')"><img :src="languageEn" alt="" draggable="false"></button>
-      <button type="button" aria-label="Русский" :aria-pressed="locale === 'ru'" @click="setLocale('ru')"><img :src="languageRu" alt="" draggable="false"></button>
+      <button type="button" :aria-label="locale === 'en' ? 'Переключить на русский' : 'Switch to English'"
+        @click="setLocale(locale === 'en' ? 'ru' : 'en')">
+        <img :src="locale === 'en' ? languageEn : languageRu" alt="" draggable="false">
+      </button>
     </div>
     <Transition name="screen" @before-leave="disableLeavingScreen">
     <div :key="currentScreen" class="kiosk-content" :class="'screen-' + currentScreen" :inert="timedOut">

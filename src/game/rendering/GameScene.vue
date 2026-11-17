@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from '../../i18n'
+
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Application, Assets, Graphics, Sprite } from 'pixi.js'
 import { gsap } from 'gsap'
@@ -24,7 +26,7 @@ const props = defineProps<{
   countdownProgress: number
   secondsLeft: number
 }>()
-const emit = defineEmits<{ swipe: [gesture: Swipe]; complete: []; home: [] }>()
+const emit = defineEmits<{ swipe: [gesture: Swipe]; complete: []; home: []; ready: [] }>()
 
 const scene = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement | null>(null)
@@ -260,6 +262,7 @@ async function init() {
     restKeeper()
     host.value?.appendChild(instance.canvas)
     ready.value = true
+    emit('ready')
   } catch {
     if (!destroyed) loadFailed.value = true
   }
@@ -407,49 +410,49 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="scene" class="game-scene" :class="{ 'has-outcome': result }" aria-label="Football game">
+  <section ref="scene" class="game-scene" :class="{ 'has-outcome': result }" :aria-label="t('Football game')">
     <div ref="host" class="pixi-host" aria-hidden="true"></div>
 
     <div class="game-hud">
       <div class="hud-card hud-score">
         <img class="hud-avatar" :src="avatarUrl" alt="" draggable="false">
         <div class="hud-value">
-          <span class="hud-label">POINTS</span>
+          <span class="hud-label">{{ t('POINTS') }}</span>
           <strong>{{ displayedScore }}</strong>
         </div>
       </div>
       <div class="shot-counter">
         <strong>{{ currentShot }}/{{ maxShots }}</strong>
-        <span class="hud-label">SHOT</span>
+        <span class="hud-label">{{ t('SHOT') }}</span>
       </div>
       <div class="hud-card hud-goals">
         <div class="hud-value">
-          <span class="hud-label">GOALS</span>
-          <span class="goal-dots" :aria-label="displayedGoals + ' goals'">
+          <span class="hud-label">{{ t('GOALS') }}</span>
+          <span class="goal-dots" :aria-label="t('Goals: {count}', { count: displayedGoals })">
             <i v-for="n in maxShots" :key="n" :class="{ filled: n <= displayedGoals }"></i>
           </span>
         </div>
       </div>
     </div>
 
-    <button class="game-home" type="button" aria-label="Home" :disabled="countdown !== null" @click="emit('home')">
+    <button class="game-home" type="button" :aria-label="t('Home')" :disabled="countdown !== null && ready" @click="emit('home')">
       <span class="home-icon" aria-hidden="true"></span>
     </button>
 
-    <div class="game-clock" :class="{ 'game-clock--urgent': secondsLeft <= 5 && countdown === null }" role="timer" aria-label="Round timer">
-      <span>TIME LEFT</span>
-      <strong>{{ Math.max(0, Math.ceil(secondsLeft)) }}s</strong>
+    <div class="game-clock" :class="{ 'game-clock--urgent': secondsLeft <= 5 && countdown === null }" role="timer" :aria-label="t('Round timer')">
+      <span>{{ t('TIME LEFT') }}</span>
+      <strong>{{ Math.max(0, Math.ceil(secondsLeft)) }}{{ t('s') }}</strong>
     </div>
 
     <Transition name="outcome">
       <div v-if="result" class="shot-result" :class="result" role="status">
-        <strong>{{ result.toUpperCase() }}</strong>
+        <strong>{{ t(result.toUpperCase()) }}</strong>
         <span class="shot-award">+{{ awardedPoints }}</span>
       </div>
     </Transition>
 
-    <div v-if="countdown !== null" class="game-countdown" role="status" aria-live="polite" aria-atomic="true">
-      <span class="sr-only">GET READY</span>
+    <div v-if="countdown !== null && ready" class="game-countdown" role="status" aria-live="polite" aria-atomic="true">
+      <span class="sr-only">{{ t('GET READY') }}</span>
       <svg class="countdown-ring" viewBox="0 0 100 100" aria-hidden="true">
         <circle class="countdown-track" cx="50" cy="50" r="45" />
         <circle class="countdown-progress" cx="50" cy="50" r="45" pathLength="100"
@@ -468,7 +471,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="dragging" class="power-meter" aria-hidden="true">
-      <span>POWER <b>{{ Math.round(power * 100) }}%</b></span>
+      <span>{{ t('POWER') }} <b>{{ Math.round(power * 100) }}%</b></span>
       <div><i :style="{ transform: `scaleX(${power})` }"></i></div>
     </div>
 
@@ -478,7 +481,7 @@ onBeforeUnmount(() => {
       :class="{ 'ball-control--dragging': dragging }"
       :style="ballControlStyle"
       :disabled="!enabled"
-      aria-label="Swipe from the ball to shoot"
+      :aria-label="t('Swipe from the ball to shoot')"
       aria-describedby="game-keyboard-help"
       @pointerdown="startSwipe"
       @pointermove="moveSwipe"
@@ -488,10 +491,10 @@ onBeforeUnmount(() => {
       @click="shootWithKeyboard"
       @keydown="aimWithKeys"
     ></button>
-    <p id="game-keyboard-help" class="game-keyboard-help">Use the arrow keys to aim, then press Enter or Space to shoot.</p>
+    <p id="game-keyboard-help" class="game-keyboard-help">{{ t('Use the arrow keys to aim, then press Enter or Space to shoot.') }}</p>
 
-    <div v-if="enabled || loadFailed" class="game-prompt" :role="loadFailed ? 'alert' : swipeHint ? 'status' : undefined">
-      {{ loadFailed ? 'GAME UNAVAILABLE. RETURN HOME TO RETRY.' : swipeHint || (dragging ? 'LENGTH + SPEED = POWER · RELEASE TO SHOOT' : 'SWIPE UP · LENGTH + SPEED CONTROL THE SHOT') }}
+    <div v-if="!ready || enabled || loadFailed" class="game-prompt" :role="loadFailed ? 'alert' : swipeHint ? 'status' : undefined">
+      {{ t(loadFailed ? 'GAME UNAVAILABLE. RETURN HOME TO RETRY.' : !ready ? 'LOADING GAME…' : swipeHint || (dragging ? 'LENGTH + SPEED = POWER · RELEASE TO SHOOT' : 'SWIPE UP · LENGTH + SPEED CONTROL THE SHOT')) }}
     </div>
   </section>
 </template>

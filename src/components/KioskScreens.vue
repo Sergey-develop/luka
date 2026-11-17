@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { locale, setLocale, t, formatNumber } from '../i18n'
+import languageEn from '../assets/art/language-en.png'
+import languageRu from '../assets/art/language-ru.png'
+
 import { computed, nextTick, ref, watch } from 'vue'
 import { gameConfig } from '../config/game'
 import rankGold from '../assets/art/rank-gold.png'
@@ -152,7 +156,11 @@ function submit() {
 </script>
 
 <template>
-  <main class="kiosk" @contextmenu.prevent>
+  <main class="kiosk" :lang="locale" @contextmenu.prevent>
+    <div class="language-switch" :class="{ 'language-switch--game': currentScreen === 'game' }" role="group" :aria-label="t('Game language')" :inert="timedOut">
+      <button type="button" aria-label="English" :aria-pressed="locale === 'en'" @click="setLocale('en')"><img :src="languageEn" alt="" draggable="false"></button>
+      <button type="button" aria-label="Русский" :aria-pressed="locale === 'ru'" @click="setLocale('ru')"><img :src="languageRu" alt="" draggable="false"></button>
+    </div>
     <Transition name="screen" @before-leave="disableLeavingScreen">
     <div :key="currentScreen" class="kiosk-content" :class="'screen-' + currentScreen" :inert="timedOut">
       <div v-if="currentScreen !== 'game'" class="coinw-logo" role="img" aria-label="CoinW"></div>
@@ -160,40 +168,40 @@ function submit() {
       <template v-if="currentScreen === 'idle'">
         <div class="idle-art" aria-hidden="true"></div>
         <div class="idle-shimmer" aria-hidden="true"></div>
-        <h1 class="challenge-title"><span>Football</span><span>Challenge</span></h1>
+        <h1 class="challenge-title"><span>{{ t('Football') }}</span><span>{{ t('Challenge') }}</span></h1>
         <div class="kiosk-actions kiosk-actions--idle">
           <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary" @click="emit('leaderboard')">
-            <span>LEADERBOARD</span>
+            <span>{{ t('LEADERBOARD') }}</span>
           </button>
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('start')">
-            <span>START GAME</span>
+            <span>{{ t('START GAME') }}</span>
           </button>
         </div>
       </template>
 
       <template v-else-if="currentScreen === 'instructions'">
         <div class="rules-art" aria-hidden="true"></div>
-        <h1 class="sr-only">5 SHOTS. SCORE BIG.</h1>
-        <section class="rules-panel" aria-label="How to play" aria-describedby="rules-swipe rules-scoring">
+        <h1 class="sr-only">{{ t('5 SHOTS. SCORE BIG.') }}</h1>
+        <section class="rules-panel" :aria-label="t('How to play')" aria-describedby="rules-swipe rules-scoring">
           <ol class="rules-steps">
             <li v-for="(step, index) in steps" :key="step.icon" class="rules-step">
-              <span class="white-pill rules-step-index">Step {{ index + 1 }}</span>
+              <span class="white-pill rules-step-index">{{ t('Step') }} {{ index + 1 }}</span>
               <span class="rule-icon" :class="'rule-icon--' + step.icon" aria-hidden="true"></span>
-              <span class="rules-step-label">{{ step.label }}</span>
+              <span class="rules-step-label">{{ t(step.label) }}</span>
             </li>
           </ol>
           <section class="rules-zones">
-            <h2 class="white-pill">Goal zones &amp; points</h2>
-            <div class="rules-goal" aria-label="Five goal zones">
+            <h2 class="white-pill">{{ t('Goal zones & points') }}</h2>
+            <div class="rules-goal" :aria-label="t('Five goal zones')">
               <span v-for="zone in goalZones" :key="zone" class="rules-goal-value" :class="'rules-goal-value--' + zone">
-                <span class="sr-only">{{ zone }}: </span>{{ points(zone) }}
+                <span class="sr-only">{{ t(zone) }}: </span>{{ points(zone) }}
               </span>
             </div>
-            <p id="rules-swipe" class="sr-only">Swipe from the ball toward the goal.</p>
+            <p id="rules-swipe" class="sr-only">{{ t('Swipe from the ball toward the goal.') }}</p>
             <div class="rules-legend">
-              <span>CENTER <strong>+{{ points('center') }}</strong></span>
-              <span>SIDE ZONES <strong>+{{ points('bottom-left') }}</strong></span>
-              <span>TOP CORNERS <strong>+{{ points('top-left') }}</strong></span>
+              <span>{{ t('CENTER') }} <strong>+{{ points('center') }}</strong></span>
+              <span>{{ t('SIDE ZONES') }} <strong>+{{ points('bottom-left') }}</strong></span>
+              <span>{{ t('TOP CORNERS') }} <strong>+{{ points('top-left') }}</strong></span>
             </div>
           </section>
           <div class="rules-outcomes">
@@ -201,22 +209,22 @@ function submit() {
               <span class="rule-ball" aria-hidden="true"></span>
               <span class="rules-shot-count"><span>×</span><b>{{ gameConfig.maxShots }}</b></span>
               <span class="rules-arrow" aria-hidden="true"></span>
-              <div class="rules-outcome-score"><b>{{ gameConfig.maxScore.toLocaleString('en-US').replaceAll(',', '\u00a0') }}</b><strong>POINTS MAX</strong><small>FOR {{ gameConfig.maxShots }} GOALS</small></div>
+              <div class="rules-outcome-score"><b>{{ gameConfig.maxScore.toLocaleString('en-US').replaceAll(',', '\u00a0') }}</b><strong>{{ t('POINTS MAX') }}</strong><small>{{ t('FOR {count} GOALS', { count: gameConfig.maxShots }) }}</small></div>
             </div>
             <div class="rules-outcome">
               <span class="rules-save-icons" aria-hidden="true"></span>
               <span class="rules-arrow" aria-hidden="true"></span>
-              <div class="rules-outcome-score"><b>0</b><strong>POINTS</strong><small>SAVE OR MISS</small></div>
+              <div class="rules-outcome-score"><b>0</b><strong>{{ t('POINTS') }}</strong><small>{{ t('SAVE OR MISS') }}</small></div>
             </div>
           </div>
-          <p id="rules-scoring" class="sr-only">Score when the ball crosses the goal line inside the posts and beats the goalkeeper.</p>
+          <p id="rules-scoring" class="sr-only">{{ t('Score when the ball crosses the goal line inside the posts and beats the goalkeeper.') }}</p>
         </section>
         <div class="kiosk-actions">
-          <button type="button" class="kiosk-button kiosk-button--home" aria-label="Back to home" @click="emit('back')">
+          <button type="button" class="kiosk-button kiosk-button--home" :aria-label="t('Back to home')" @click="emit('back')">
             <span class="house-icon" aria-hidden="true"></span>
           </button>
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('continue')">
-            <span>CONTINUE</span>
+            <span>{{ t('CONTINUE') }}</span>
           </button>
         </div>
       </template>
@@ -225,34 +233,34 @@ function submit() {
         <div class="registration-art" aria-hidden="true"></div>
         <div class="registration-panel" :class="{ 'registration-panel--alternate': alternate }">
           <template v-if="alternate">
-            <input v-model="nickname" class="kiosk-field" aria-label="Nickname" placeholder="Enter your nickname" maxlength="40" autocomplete="off" required @input="fieldTouched = true">
-            <input v-model="email" class="kiosk-field" aria-label="Email" type="email" placeholder="Enter your email" maxlength="254" autocomplete="off" required
+            <input v-model="nickname" class="kiosk-field" :aria-label="t('Nickname')" :placeholder="t('Enter your nickname')" maxlength="40" autocomplete="off" required @input="fieldTouched = true">
+            <input v-model="email" class="kiosk-field" :aria-label="t('Email')" type="email" :placeholder="t('Enter your email')" maxlength="254" autocomplete="off" required
               :aria-invalid="!!error" :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true">
           </template>
           <label v-else class="uid-field">
             <input id="uid" v-model="uid" class="kiosk-field" aria-label="CoinW UID" inputmode="none" autocomplete="off"
-              placeholder="Enter your CoinW UID" maxlength="20" required :aria-invalid="!!error"
+              :placeholder="t('Enter your CoinW UID')" maxlength="20" required :aria-invalid="!!error"
               :aria-describedby="error ? 'registration-error' : 'uid-hint'" @input="fieldTouched = true">
             <span class="keyboard-icon" aria-hidden="true"><i></i></span>
           </label>
-          <p v-if="error" id="registration-error" class="registration-error" role="alert">{{ error }}</p>
-          <p v-else-if="!alternate" id="uid-hint" class="registration-hint">Use the keypad to enter your CoinW UID.</p>
-          <div v-if="!alternate" class="uid-keypad" role="group" aria-label="UID keypad">
-            <button v-for="key in keypad" :key="key" type="button" class="uid-key" :aria-label="keyLabel(key)"
+          <p v-if="error" id="registration-error" class="registration-error" role="alert">{{ t(error) }}</p>
+          <p v-else-if="!alternate" id="uid-hint" class="registration-hint">{{ t('Use the keypad to enter your CoinW UID.') }}</p>
+          <div v-if="!alternate" class="uid-keypad" role="group" :aria-label="t('UID keypad')">
+            <button v-for="key in keypad" :key="key" type="button" class="uid-key" :aria-label="t(keyLabel(key))"
               :class="{ 'uid-key--command': key === 'clear' || key === 'backspace' }" @click="pressKey(key)">
-              {{ key === 'clear' ? 'CLEAR' : key === 'backspace' ? '⌫' : key }}
+              {{ key === 'clear' ? t('CLEAR') : key === 'backspace' ? '⌫' : key }}
             </button>
           </div>
           <button v-if="allowAlternative" type="button" class="registration-alternative" @click="toggleRegistration">
-            {{ alternate ? 'Use CoinW UID instead' : 'Use nickname and email instead' }}
+            {{ t(alternate ? 'Use CoinW UID instead' : 'Use nickname and email instead') }}
           </button>
         </div>
         <div class="kiosk-actions">
           <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary kiosk-button--short" @click="emit('back')">
-            <span>BACK</span>
+            <span>{{ t('BACK') }}</span>
           </button>
           <button type="submit" class="kiosk-button kiosk-button--cut-left" :disabled="!ready">
-            <span>START GAME</span>
+            <span>{{ t('START GAME') }}</span>
           </button>
         </div>
       </form>
@@ -260,14 +268,14 @@ function submit() {
       <template v-else-if="currentScreen === 'finished'">
         <div class="results-art" aria-hidden="true"><span class="ambient-arena"></span></div>
         <section class="result-hero">
-          <h1 class="white-pill">Your result</h1>
+          <h1 class="white-pill">{{ t('Your result') }}</h1>
         </section>
-        <section class="result-summary" aria-label="Score and goals">
-          <div class="result-score"><strong>{{ score.toLocaleString('en-US') }}</strong><span>POINTS</span></div>
+        <section class="result-summary" :aria-label="t('Score and goals')">
+          <div class="result-score"><strong>{{ formatNumber(score) }}</strong><span>{{ t('POINTS') }}</span></div>
           <div class="result-stats">
             <div class="result-stat result-stat--goals">
               <span class="result-stat-rim" aria-hidden="true"></span>
-              <small>GOALS: {{ goals }}/{{ gameConfig.maxShots }}</small>
+              <small>{{ t('GOALS') }}: {{ goals }}/{{ gameConfig.maxShots }}</small>
               <div class="result-dots" aria-hidden="true">
                 <i v-for="n in gameConfig.maxShots" :key="n" :class="{ scored: n <= goals }"></i>
               </div>
@@ -276,33 +284,33 @@ function submit() {
               <span class="result-stat-rim" aria-hidden="true"></span>
               <span class="rule-icon rule-icon--trophy" aria-hidden="true"></span>
               <div class="result-rank">
-                <small>TODAY'S RANK</small>
+                <small>{{ t("TODAY'S RANK") }}</small>
                 <strong v-if="rank !== null">#{{ rank }}</strong>
-                <strong v-else aria-label="Unavailable">—</strong>
-                <span>{{ shots }} / {{ gameConfig.maxShots }} SHOTS</span>
+                <strong v-else :aria-label="t('Unavailable')">—</strong>
+                <span>{{ shots }} / {{ gameConfig.maxShots }} {{ t('SHOTS') }}</span>
               </div>
             </div>
           </div>
-          <p v-if="saveMessage" class="result-notice" role="status">{{ saveMessage }}</p>
+          <p v-if="saveMessage" class="result-notice" role="status">{{ t(saveMessage) }}</p>
         </section>
         <div class="kiosk-actions">
           <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary kiosk-button--short" @click="emit('finish')">
-            <span>FINISH</span>
+            <span>{{ t('FINISH') }}</span>
           </button>
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('leaderboard')">
-            <span>VIEW LEADERBOARD</span>
+            <span>{{ t('VIEW LEADERBOARD') }}</span>
           </button>
         </div>
       </template>
 
       <template v-else-if="currentScreen === 'leaderboard'">
         <div class="leaderboard-art" aria-hidden="true"><span class="ambient-arena"></span></div>
-        <section class="leaderboard-panel" :class="{ 'leaderboard-panel--message': leaderboardStatus !== 'success' || !playerRecords.length }" aria-label="Leaderboard">
-          <h1>TODAY’S LEADERBOARD</h1>
-          <p class="leaderboard-caption">Luka Modrić Football Challenge</p>
+        <section class="leaderboard-panel" :class="{ 'leaderboard-panel--message': leaderboardStatus !== 'success' || !playerRecords.length }" :aria-label="t('Leaderboard')">
+          <h1>{{ t('TODAY’S LEADERBOARD') }}</h1>
+          <p class="leaderboard-caption">{{ t('Luka Modrić Football Challenge') }}</p>
           <div v-if="leaderboardStatus === 'success' && playerRecords.length" class="leaderboard-scroll">
             <table class="leaderboard-table">
-              <thead><tr><th scope="col">#</th><th scope="col">PLAYER</th><th scope="col">GOALS</th><th scope="col">POINTS</th></tr></thead>
+              <thead><tr><th scope="col">#</th><th scope="col">{{ t('PLAYER') }}</th><th scope="col">{{ t('GOALS') }}</th><th scope="col">{{ t('POINTS') }}</th></tr></thead>
               <tbody>
                 <tr v-for="(entry, index) in playerRecords" :key="entry.id ?? index" :class="{ 'leaderboard-current': isCurrent(entry) }">
                   <th scope="row">
@@ -312,9 +320,9 @@ function submit() {
                     </template>
                     <template v-else>{{ entry.rank ?? index + 1 }}</template>
                   </th>
-                  <td :title="entry.playerId">{{ entry.playerId }}<span v-if="isCurrent(entry)" class="current-tag">YOU</span></td>
+                  <td :title="entry.playerId">{{ entry.playerId }}<span v-if="isCurrent(entry)" class="current-tag">{{ t('YOU') }}</span></td>
                   <td>{{ entry.goals }}</td>
-                  <td><strong>{{ entry.score.toLocaleString('en-US') }}</strong></td>
+                  <td><strong>{{ formatNumber(entry.score) }}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -323,20 +331,20 @@ function submit() {
             <div class="rank-ghost" aria-hidden="true"></div>
             <div class="leaderboard-status" role="status">
               <span class="status-badge" aria-hidden="true">{{ leaderboardStatus === 'loading' ? '…' : '!' }}</span>
-              <p v-if="leaderboardStatus === 'loading'">Loading leaderboard…</p>
+              <p v-if="leaderboardStatus === 'loading'">{{ t('Loading leaderboard…') }}</p>
               <template v-else-if="leaderboardStatus === 'unavailable'">
-                <p v-if="didSaveLocally">Result saved on<br>this kiosk</p>
-                <p v-else>Leaderboard unavailable</p>
-                <span v-if="didSaveLocally">Leaderboard position<br>temporarily unavailable</span>
+                <p v-if="didSaveLocally">{{ t('Result saved on this kiosk') }}</p>
+                <p v-else>{{ t('Leaderboard unavailable') }}</p>
+                <span v-if="didSaveLocally">{{ t('Leaderboard position temporarily unavailable') }}</span>
               </template>
-              <p v-else-if="leaderboardStatus === 'error'">Could not load leaderboard</p>
-              <p v-else>No results yet</p>
+              <p v-else-if="leaderboardStatus === 'error'">{{ t('Could not load leaderboard') }}</p>
+              <p v-else>{{ t('No results yet') }}</p>
             </div>
           </template>
         </section>
         <div class="kiosk-actions">
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('newGame')">
-            <span>NEW GAME</span>
+            <span>{{ t('NEW GAME') }}</span>
           </button>
         </div>
       </template>
@@ -347,12 +355,12 @@ function submit() {
 
     <div v-if="timedOut" class="timeout-overlay">
       <section class="timeout-panel" role="alertdialog" aria-modal="true" aria-labelledby="timeout-title" aria-describedby="timeout-description">
-        <h2 id="timeout-title">STILL PLAYING?</h2>
+        <h2 id="timeout-title">{{ t('STILL PLAYING?') }}</h2>
         <p id="timeout-description">
-          {{ timeoutSeconds === null ? 'Returning to the start shortly.' : 'Returning to the start in ' + timeoutSeconds + ' seconds.' }}
+          {{ timeoutSeconds === null ? t('Returning to the start shortly.') : t('Returning to the start in {seconds} seconds.', { seconds: timeoutSeconds }) }}
         </p>
         <button ref="resumeButton" type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('resume')">
-          <span>CONTINUE</span>
+          <span>{{ t('CONTINUE') }}</span>
         </button>
       </section>
     </div>

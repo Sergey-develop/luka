@@ -1,0 +1,115 @@
+import { ref, watch } from 'vue'
+
+export type Locale = 'en' | 'ru'
+const storageKey = 'coinw-football-language'
+function initialLocale(): Locale {
+  try { return localStorage.getItem(storageKey) === 'ru' ? 'ru' : 'en' }
+  catch { return 'en' }
+}
+export const locale = ref<Locale>(initialLocale())
+watch(locale, value => {
+  if (typeof document !== 'undefined') document.documentElement.lang = value
+}, { immediate: true, flush: 'sync' })
+export function setLocale(value: Locale) {
+  locale.value = value
+  try { localStorage.setItem(storageKey, value) } catch { /* Still switch if storage is unavailable. */ }
+}
+const russian: Record<string, string> = {
+  "Football": "Футбольный",
+  "Challenge": "челлендж",
+  "LEADERBOARD": "РЕЙТИНГ",
+  "START GAME": "НАЧАТЬ ИГРУ",
+  "5 SHOTS. SCORE BIG.": "5 УДАРОВ. НАБЕРИ МАКСИМУМ.",
+  "How to play": "Как играть",
+  "Step": "Шаг",
+  "ENTER YOUR UID": "ВВЕДИ СВОЙ UID",
+  "TAKE A SHOT": "УДАРЬ ПО МЯЧУ",
+  "SCORE POINTS": "НАБИРАЙ ОЧКИ",
+  "Goal zones & points": "Зоны ворот и очки",
+  "Five goal zones": "Пять зон ворот",
+  "Swipe from the ball toward the goal.": "Проведи от мяча в сторону ворот.",
+  "CENTER": "ЦЕНТР",
+  "SIDE ZONES": "ПО КРАЯМ",
+  "TOP CORNERS": "ВЕРХНИЕ УГЛЫ",
+  "POINTS MAX": "МАКС. ОЧКОВ",
+  "FOR {count} GOALS": "ЗА {count} ГОЛОВ",
+  "POINTS": "ОЧКИ",
+  "SAVE OR MISS": "СЕЙВ ИЛИ ПРОМАХ",
+  "Score when the ball crosses the goal line inside the posts and beats the goalkeeper.": "Очки начисляются, если мяч пересёк линию ворот и вратарь его не отбил.",
+  "Back to home": "На главный экран",
+  "CONTINUE": "ПРОДОЛЖИТЬ",
+  "Nickname": "Никнейм",
+  "Email": "Эл. почта",
+  "Enter your nickname": "Введи свой никнейм",
+  "Enter your email": "Введи свою почту",
+  "Enter your CoinW UID": "Введи свой CoinW UID",
+  "Use the keypad to enter your CoinW UID.": "Введи CoinW UID с помощью клавиатуры.",
+  "UID keypad": "Клавиатура UID",
+  "CLEAR": "СБРОС",
+  "Clear UID": "Очистить UID",
+  "Delete last digit": "Удалить последнюю цифру",
+  "Use CoinW UID instead": "Войти по CoinW UID",
+  "Use nickname and email instead": "Войти по никнейму и почте",
+  "BACK": "НАЗАД",
+  "Your result": "Твой результат",
+  "Score and goals": "Очки и голы",
+  "GOALS": "ГОЛЫ",
+  "TODAY'S RANK": "МЕСТО ЗА СЕГОДНЯ",
+  "Unavailable": "Недоступно",
+  "SHOTS": "УДАРОВ",
+  "FINISH": "ГОТОВО",
+  "VIEW LEADERBOARD": "РЕЙТИНГ",
+  "Leaderboard": "Рейтинг",
+  "TODAY’S LEADERBOARD": "РЕЙТИНГ ЗА СЕГОДНЯ",
+  "Luka Modrić Football Challenge": "Футбольный челлендж с Лукой Модричем",
+  "PLAYER": "ИГРОК",
+  "YOU": "ТЫ",
+  "Loading leaderboard…": "Загрузка рейтинга…",
+  "Result saved on this kiosk": "Результат сохранён на этом устройстве",
+  "Leaderboard unavailable": "Рейтинг недоступен",
+  "Leaderboard position temporarily unavailable": "Место в рейтинге временно недоступно",
+  "Could not load leaderboard": "Не удалось загрузить рейтинг",
+  "No results yet": "Результатов пока нет",
+  "NEW GAME": "НОВАЯ ИГРА",
+  "STILL PLAYING?": "ПРОДОЛЖИМ?",
+  "Returning to the start shortly.": "Скоро вернёмся на главный экран.",
+  "Returning to the start in {seconds} seconds.": "Возврат на главный экран через {seconds} сек.",
+  "Enter a valid email address.": "Введи корректный адрес почты.",
+  "Use up to 20 digits for your CoinW UID.": "CoinW UID должен содержать не более 20 цифр.",
+  "Could not save result on this kiosk": "Не удалось сохранить результат на этом устройстве",
+  "Result saved on this kiosk; leaderboard position temporarily unavailable": "Результат сохранён. Место в рейтинге временно недоступно",
+  "Football game": "Футбольная игра",
+  "SHOT": "УДАР",
+  "Goals: {count}": "Голы: {count}",
+  "Home": "На главный экран",
+  "Round timer": "Таймер раунда",
+  "TIME LEFT": "ВРЕМЯ",
+  "s": "с",
+  "GOAL": "ГОЛ",
+  "SAVED": "СЕЙВ",
+  "MISS": "ПРОМАХ",
+  "GET READY": "ПРИГОТОВЬСЯ",
+  "POWER": "СИЛА",
+  "Swipe from the ball to shoot": "Проведи от мяча, чтобы ударить",
+  "Use the arrow keys to aim, then press Enter or Space to shoot.": "Прицелься стрелками и нажми Enter или пробел для удара.",
+  "GAME UNAVAILABLE. RETURN HOME TO RETRY.": "ИГРА НЕ ЗАГРУЗИЛАСЬ. ВЕРНИСЬ В МЕНЮ И ПОПРОБУЙ СНОВА.",
+  "LOADING GAME…": "ЗАГРУЗКА ИГРЫ…",
+  "LENGTH + SPEED = POWER · RELEASE TO SHOOT": "ДЛИНА + СКОРОСТЬ = СИЛА · ОТПУСТИ ДЛЯ УДАРА",
+  "SWIPE UP · LENGTH + SPEED CONTROL THE SHOT": "ПРОВЕДИ ВВЕРХ · ДЛИНА И СКОРОСТЬ ЗАДАЮТ СИЛУ",
+  "SWIPE A LITTLE FARTHER": "ПРОВЕДИ ЧУТЬ ДАЛЬШЕ",
+  "SWIPE UP FROM THE BALL": "ПРОВЕДИ ОТ МЯЧА ВВЕРХ",
+  "Game language": "Язык игры",
+  "top-left": "левый верхний угол",
+  "top-right": "правый верхний угол",
+  "bottom-left": "левая нижняя зона",
+  "bottom-right": "правая нижняя зона",
+  "center": "центр"
+}
+
+export function t(message: string, values: Record<string, string | number> = {}): string {
+  const translated = locale.value === 'ru' ? russian[message] ?? message : message
+  return translated.replace(/\{(\w+)\}/g, (match, key: string) => String(values[key] ?? match))
+}
+export function formatNumber(value: number): string {
+  return value.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-US')
+}

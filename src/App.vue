@@ -12,6 +12,7 @@ const engine = reactive(new GameEngine())
 const repository = new LocalResultsRepository()
 const { timing } = gameConfig
 const shot = ref<(Shot & { id: number }) | null>(null)
+const sceneReady = ref(false)
 const countdownRemainingMs = ref(0)
 const countdown = computed(() => engine.phase === 'countdown'
   ? Math.max(1, Math.ceil(countdownRemainingMs.value / 1000)) : null)
@@ -48,11 +49,19 @@ watch(() => engine.phase, (phase) => {
   if (countdownFrame !== undefined) cancelAnimationFrame(countdownFrame)
   countdownFrame = undefined
   countdownRemainingMs.value = phase === 'countdown' ? timing.countdownMs : 0
-  if (phase === 'countdown') countdownFrame = requestAnimationFrame(updateCountdown)
+  if (phase === 'countdown' && sceneReady.value) countdownFrame = requestAnimationFrame(updateCountdown)
 }, { flush: 'sync' })
 
+function sceneLoaded() {
+  sceneReady.value = true
+  if (engine.phase === 'countdown') {
+    phaseStarted = Date.now()
+    countdownFrame = requestAnimationFrame(updateCountdown)
+  }
+}
+
 function updateCountdown() {
-  if (engine.phase !== 'countdown') return
+  if (engine.phase !== 'countdown' || !sceneReady.value) return
   countdownRemainingMs.value = Math.max(0, timing.countdownMs - (Date.now() - phaseStarted))
   if (countdownRemainingMs.value === 0) engine.start()
   else countdownFrame = requestAnimationFrame(updateCountdown)
@@ -66,6 +75,7 @@ function tick() {
   const now = Date.now()
 
   if (engine.phase === 'countdown') {
+    if (!sceneReady.value) return
     const remaining = timing.countdownMs - (now - phaseStarted)
     if (remaining <= 0) engine.start()
     return
@@ -118,6 +128,7 @@ onBeforeUnmount(() => {
 })
 
 function clearRound() {
+  sceneReady.value = false
   roundToken++
   requestId++
   shot.value = null
@@ -252,6 +263,7 @@ function register(player: Player) {
       :score="engine.score"
       :goals="engine.goals"
       :shots="engine.shots.length"
+      @ready="sceneLoaded"
       @swipe="fire"
       @complete="complete"
       @home="home"

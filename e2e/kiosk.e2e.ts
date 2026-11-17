@@ -45,8 +45,9 @@ test('START GAME has hover and keyboard focus, and UID gates the start button', 
   const resting = await button.screenshot()
   await button.hover()
   await expect.poll(async () => (await button.screenshot()).equals(resting)).toBe(false)
-  await page.keyboard.press('Tab')
-  if (!(await button.evaluate(el => el.matches(':focus-visible')))) await page.keyboard.press('Tab')
+  for (let i = 0; i < 4 && !(await button.evaluate(el => el.matches(':focus-visible'))); i++) {
+    await page.keyboard.press('Tab')
+  }
   await expect(button).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('region', { name: 'How to play' })).toBeVisible()
@@ -248,5 +249,27 @@ test('countdown ring and digits share the same three-second clock', async ({ pag
   expect(Number(await progress.getAttribute('stroke-dashoffset'))).toBeCloseTo(70, 0)
   await page.clock.runFor(1000)
   await expect(page.locator('.game-countdown')).toHaveCount(0)
+  await expect(ball(page)).toBeEnabled()
+})
+
+
+test('slow game assets do not consume the countdown or the playing time', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  let release!: () => void
+  const hold = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/keeper-idle-clean.png', async route => {
+    await hold
+    await route.continue()
+  })
+  await page.clock.install()
+  await openGame(page)
+  await expect(page.getByText('LOADING GAME…', { exact: true })).toBeVisible()
+  await page.clock.fastForward(30000)
+  await expect(page.getByText('LOADING GAME…', { exact: true })).toBeVisible()
+  await expect(page.locator('.ball-control')).toBeDisabled()
+  await expect(page.locator('.game-clock')).toContainText('20s')
+  release()
+  await expect(page.locator('.game-countdown strong')).toHaveText('3')
+  await page.clock.runFor(3100)
   await expect(ball(page)).toBeEnabled()
 })

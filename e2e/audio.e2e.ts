@@ -120,7 +120,7 @@ test('a kick uses a recording and goal and miss trigger different crowd recordin
 
 test('menu clicks are audible without waiting for stadium files', async ({ page }) => {
   // A stalled crowd download must never delay or suppress a menu click.
-  await page.route('**/assets/audio/stadium.ogg', route => route.abort())
+  await page.route('**/assets/audio/stadium.mp3', route => route.abort())
   await page.goto('/')
   const resetPeak = () => page.evaluate(() => { (window as unknown as { audioProbe: { peak: number } }).audioProbe.peak = 0 })
   const peak = () => page.evaluate(() => (window as unknown as { audioProbe: { peak: number } }).audioProbe.peak)
@@ -164,4 +164,33 @@ test('the final goal fades out on the result screen instead of being cut off', a
   expect(stops.length).toBeGreaterThanOrEqual(6)
   expect(stops.at(-1)!.delay).toBeGreaterThan(.85)
   expect(stops.at(-1)!.delay).toBeLessThanOrEqual(.96)
+})
+
+
+test.describe('mobile playback', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+  test('touch starts sound without requiring Ogg support', async ({ page }) => {
+    await page.addInitScript(() => {
+      const decode = AudioContext.prototype.decodeAudioData
+      AudioContext.prototype.decodeAudioData = function (data: ArrayBuffer, ...callbacks: unknown[]) {
+        if (new Uint8Array(data, 0, 4).every((byte, i) => byte === [79, 103, 103, 83][i])) {
+          return Promise.reject(new DOMException('Ogg unsupported', 'EncodingError'))
+        }
+        return Reflect.apply(decode, this, [data, ...callbacks])
+      } as typeof decode
+      Object.defineProperty(navigator, 'audioSession', { configurable: true, value: { type: 'auto' } })
+    })
+    const audioRequests: string[] = []
+    page.on('request', request => { if (request.resourceType() === 'fetch' && /\.(ogg|mp3)(\?|$)/.test(request.url())) audioRequests.push(request.url()) })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'START GAME', exact: true }).tap()
+    await expect.poll(() => page.evaluate(() => (window as unknown as { audioProbe: { peak: number } }).audioProbe.peak)).toBeGreaterThan(.001)
+    expect(await page.evaluate(() => (navigator as Navigator & { audioSession: { type: string } }).audioSession.type)).toBe('playback')
+    await page.getByRole('button', { name: 'CONTINUE', exact: true }).tap()
+    await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('123456')
+    await page.getByRole('button', { name: 'START GAME', exact: true }).tap()
+    await expect.poll(() => page.evaluate(() => (window as unknown as { audioProbe: { starts: { loop: boolean }[] } }).audioProbe.starts.some(s => s.loop))).toBe(true)
+    expect(audioRequests.length).toBe(5)
+    expect(audioRequests.every(url => url.endsWith('.mp3'))).toBe(true)
+  })
 })

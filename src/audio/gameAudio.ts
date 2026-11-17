@@ -1,8 +1,8 @@
-import stadiumUrl from '../assets/audio/stadium.ogg'
-import applauseUrl from '../assets/audio/goal-crowd-balanced.ogg'
-import booUrl from '../assets/audio/miss-balanced.ogg'
-import kickUrl from '../assets/audio/kick.ogg'
-import clickUrl from '../assets/audio/click.ogg'
+import stadiumUrl from '../assets/audio/stadium.mp3'
+import applauseUrl from '../assets/audio/goal-crowd-balanced.mp3'
+import booUrl from '../assets/audio/miss-balanced.mp3'
+import kickUrl from '../assets/audio/kick.mp3'
+import clickUrl from '../assets/audio/click.mp3'
 import type { Outcome } from '../types/game'
 
 class GameAudio {
@@ -25,6 +25,11 @@ class GameAudio {
     if (this.disposed) return
     try {
       if (!this.context) {
+        // Request media playback on iOS / embedded WebKit when supported.
+        try {
+          const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+          if (session) session.type = 'playback'
+        } catch { /* Older webviews may expose a read-only or unavailable session. */ }
         this.context = new AudioContext()
         this.master = this.context.createGain()
         this.master.gain.value = .65
@@ -196,6 +201,7 @@ class GameAudio {
   mount() {
     void this.preloadClick()
     document.addEventListener('pointerdown', this.onGesture, true)
+    document.addEventListener('touchend', this.onGesture, true)
     document.addEventListener('keydown', this.onGesture, true)
     document.addEventListener('click', this.onClick, true)
     document.addEventListener('visibilitychange', this.onVisibility)
@@ -204,6 +210,7 @@ class GameAudio {
   dispose() {
     this.disposed = true
     document.removeEventListener('pointerdown', this.onGesture, true)
+    document.removeEventListener('touchend', this.onGesture, true)
     document.removeEventListener('keydown', this.onGesture, true)
     document.removeEventListener('click', this.onClick, true)
     document.removeEventListener('visibilitychange', this.onVisibility)

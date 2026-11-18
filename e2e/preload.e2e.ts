@@ -13,7 +13,7 @@ test('all screens and a second round work offline after the first load', async (
   const openGame = async () => {
     await page.getByRole('button', { name: 'START GAME', exact: true }).click()
     await page.getByRole('button', { name: 'CONTINUE', exact: true }).click()
-    await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('123456')
+    await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('12345678')
     await page.getByRole('button', { name: 'START GAME', exact: true }).click()
     await expect(page.locator('.ball-control')).toBeEnabled({ timeout: 6000 })
   }
@@ -21,16 +21,13 @@ test('all screens and a second round work offline after the first load', async (
   for (let shot = 0; shot < 5; shot++) {
     await expect(page.locator('.ball-control')).toBeEnabled()
     await page.locator('.ball-control').press('Enter')
-    await expect(page.getByRole('status').getByText('SAVED', { exact: true })).toBeVisible()
+    await expect(page.getByRole('status').getByText(/^(GOAL|SAVED)$/)).toBeVisible()
   }
   await expect(page.getByRole('heading', { name: 'Your result', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'VIEW LEADERBOARD', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: 'PLAYER', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'NEW GAME', exact: true }).click()
-  await page.getByRole('button', { name: 'CONTINUE', exact: true }).click()
-  await page.getByRole('textbox', { name: 'CoinW UID', exact: true }).fill('123456')
-  await page.getByRole('button', { name: 'START GAME', exact: true }).click()
-  await expect(page.locator('.ball-control')).toBeEnabled({ timeout: 6000 })
+  await page.getByRole('button', { name: 'HOME', exact: true }).click()
+  await openGame()
   await expect(page.locator('.shot-counter')).toContainText('1/5')
   await expect(page.locator('.pixi-host canvas')).toHaveAttribute('data-original-canvas', 'yes')
   expect(lateRequests).toEqual([])

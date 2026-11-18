@@ -36,20 +36,32 @@ export function constrainSwipe(swipe: Swipe): Swipe {
   }
 }
 
-export function shotPower(gesture: Swipe): number {
+function powerAtLength(gesture: Swipe, fullPowerLength: number): number {
   const { swipe } = gameConfig
   const length = Math.hypot(gesture.dx, gesture.dy)
-  const pull = clamp01((length - swipe.minLength) / (swipe.fullPowerLength - swipe.minLength))
+  const pull = clamp01((length - swipe.minLength) / (fullPowerLength - swipe.minLength))
   const speed = length / (Math.max(60, gesture.durationMs ?? swipe.defaultDurationMs) / 1000)
   return .8 * pull + .2 * clamp01((speed - 250) / 1750)
+}
+
+export function shotPower(gesture: Swipe): number {
+  return powerAtLength(gesture, gameConfig.swipe.fullPowerLength)
 }
 
 export function launchTrajectory(gesture: Swipe): Trajectory {
   const { ballistics, swipe } = gameConfig
   const bounded = constrainSwipe(gesture)
   const speed = ballistics.minSpeed + shotPower(bounded) * (ballistics.maxSpeed - ballistics.minSpeed)
-  const elevation = .09 + .3 * clamp01((-bounded.dy - swipe.minLength) / (swipe.fullPowerLength - swipe.minLength))
+  const aimElevation = .09 + .3 * clamp01((-bounded.dy - swipe.minLength) / (swipe.elevationLength - swipe.minLength))
   const yaw = Math.atan2(bounded.dx, Math.max(swipe.minLength, -bounded.dy)) * .5
+  // Keep the same target height while the calibrated power changes ball speed.
+  const referenceSpeed = ballistics.minSpeed + powerAtLength(bounded, swipe.elevationLength) * (ballistics.maxSpeed - ballistics.minSpeed)
+  const distance = ballistics.goalDistance / Math.cos(yaw)
+  const referenceTime = distance / (referenceSpeed * Math.cos(aimElevation))
+  const height = referenceSpeed * Math.sin(aimElevation) * referenceTime - .5 * ballistics.gravity * referenceTime ** 2
+  const gravityTerm = ballistics.gravity * distance ** 2 / (2 * speed ** 2)
+  const discriminant = Math.max(0, distance ** 2 - 4 * gravityTerm * (gravityTerm + height))
+  const elevation = Math.atan((2 * (gravityTerm + height)) / (distance + Math.sqrt(discriminant)))
   const vx = speed * Math.cos(elevation) * Math.sin(yaw)
   const vy = speed * Math.sin(elevation)
   const vz = speed * Math.cos(elevation) * Math.cos(yaw)
@@ -90,15 +102,19 @@ export function evaluateSwipe(swipe: Swipe, attemptIndex: number, previousShot?:
   if (baseReactionMs === undefined) throw new Error('No goalkeeper reaction defined for this attempt')
   // Read a repeated corner: an earlier push-off, not a forced save outcome.
   const anticipated = zone !== null && zone.startsWith('top-') && previousShot?.zone === zone
-  const reactionMs = anticipated ? Math.min(baseReactionMs, 70) : baseReactionMs
+  const reactionMs = anticipated ? Math.min(baseReactionMs, 190) : baseReactionMs
+  // On some hard central shots the keeper commits to the wrong side.
+  const wrongSide = zone === 'center' && Math.abs(target.x - keeper.start.x) < 70
+    && shotPower(swipe) >= .7 && (attemptIndex === 1 || attemptIndex === 3)
+  const predictedX = target.x + (wrongSide ? (attemptIndex === 1 ? -120 : 120) : 0)
   const desired = {
-    x: Math.min(field.goal.right - field.ballRadius, Math.max(field.goal.left + field.ballRadius, target.x)),
+    x: Math.min(field.goal.right - field.ballRadius, Math.max(field.goal.left + field.ballRadius, predictedX)),
     y: Math.min(field.goal.bottom - field.ballRadius, Math.max(field.goal.top + field.ballRadius, target.y)),
   }
   const dx = desired.x - keeper.start.x
   const dy = desired.y - keeper.start.y
   // Vary the strength of the push-off; saves still require physical reach.
-  const effort = Math.max(keeper.diveEffort[attemptIndex], anticipated ? 1.5 : 0)
+  const effort = Math.max(keeper.diveEffort[attemptIndex], anticipated ? 1.05 : 0)
   const travelSeconds = Math.hypot(dx / (keeper.speed.x * effort), dy / (keeper.speed.y * effort))
   const availableSeconds = Math.max(0, flightMs - reactionMs) / 1000
   const reach = travelSeconds === 0 ? 1 : clamp01(availableSeconds / travelSeconds)

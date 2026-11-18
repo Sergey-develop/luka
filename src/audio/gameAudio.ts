@@ -60,6 +60,9 @@ class GameAudio {
           if (session) session.type = 'playback'
         } catch { /* Older webviews may expose a read-only or unavailable session. */ }
         this.context = new AudioContext()
+        this.context.addEventListener('statechange', () => {
+          if (this.context?.state === 'running') { this.syncMenuMusic(); this.syncCrowd() }
+        })
         this.master = this.context.createGain()
         this.master.gain.value = .65
         const limiter = this.context.createDynamicsCompressor()
@@ -266,6 +269,7 @@ class GameAudio {
   }
 
   mount() {
+    void this.unlock()
     void this.preloadClick()
     document.addEventListener('pointerdown', this.onGesture, true)
     document.addEventListener('touchend', this.onGesture, true)

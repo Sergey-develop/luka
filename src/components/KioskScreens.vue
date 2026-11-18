@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import IdleArtwork from './IdleArtwork.vue'
 import { locale, setLocale, t, formatNumber } from '../i18n'
 import languageEn from '../assets/art/language-en.png'
 import languageRu from '../assets/art/language-ru.png'
+import footballTitle from '../assets/art/football.svg'
+import challengeTitle from '../assets/art/challenge.svg'
 
 import { computed, nextTick, ref, watch } from 'vue'
 import { gameConfig } from '../config/game'
@@ -30,6 +33,7 @@ const props = withDefaults(defineProps<{
   rank?: number | null
   saveMessage?: string
   leaderboard?: Entry[]
+  leaderboardCount?: number
   leaderboardStatus?: string
   allowAlternative?: boolean
   currentResultId?: string | null
@@ -45,6 +49,7 @@ const props = withDefaults(defineProps<{
   rank: null,
   saveMessage: '',
   leaderboard: () => [],
+  leaderboardCount: 0,
   leaderboardStatus: 'empty',
   allowAlternative: false,
   currentResultId: null,
@@ -65,26 +70,24 @@ const emit = defineEmits<{
 }>()
 
 const uid = ref('')
+const keypadOpen = ref(false)
+const policyOpen = ref(false)
 const nickname = ref('')
-const email = ref('')
 const alternate = ref(false)
 const fieldTouched = ref(false)
 const resumeButton = ref<HTMLButtonElement | null>(null)
-const playerRecords = computed(() => {
-  const top = props.leaderboard.slice(0, 10)
-  const current = props.leaderboard.slice(10).find(entry => isCurrent(entry))
-  return current ? [...top, current] : top
-})
+const playerRecords = computed(() => props.leaderboard.slice(0, 10))
+const currentEntry = computed(() => props.leaderboard.find(isCurrent))
 
-const uidIsValid = computed(() => /^\d{1,20}$/.test(uid.value.trim()))
-const emailIsValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()))
-const ready = computed(() => alternate.value ? !!nickname.value.trim() && emailIsValid.value : uidIsValid.value)
+const uidIsValid = computed(() => /^\d{8}$/.test(uid.value.trim()))
+const emailIsValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nickname.value.trim()))
+const ready = computed(() => alternate.value ? !!nickname.value.trim() && (nickname.value.includes('@') ? emailIsValid.value : nickname.value.trim().length <= 40) : uidIsValid.value)
 const error = computed(() => {
   if (!fieldTouched.value) return ''
   if (alternate.value) {
-    return email.value.trim() && !emailIsValid.value ? 'Enter a valid email address.' : ''
+    return nickname.value.includes('@') && !emailIsValid.value ? 'Enter a valid email address.' : ''
   }
-  return uid.value && !uidIsValid.value ? 'Use up to 20 digits for your CoinW UID.' : ''
+  return uid.value && !uidIsValid.value ? 'Enter exactly 8 digits for your CoinW UID.' : ''
 })
 const currentScreen = computed(() =>
   ['countdown', 'aiming', 'shooting', 'resolving', 'shot-result'].includes(props.screen) ? 'game' : props.screen,
@@ -103,8 +106,9 @@ let priorFocus: HTMLElement | null = null
 
 watch(() => props.screen, () => {
   uid.value = ''
+  keypadOpen.value = false
+  policyOpen.value = false
   nickname.value = ''
-  email.value = ''
   alternate.value = false
   fieldTouched.value = false
 })
@@ -133,6 +137,11 @@ function isCurrent(entry: Entry) {
   return !!props.currentResultId && entry.id === props.currentResultId
 }
 
+function closeKeypadOutside(event: PointerEvent) {
+  const target = event.target
+  if (keypadOpen.value && target instanceof Element && !target.closest('.uid-field, .uid-keypad, .keypad-close')) keypadOpen.value = false
+}
+
 function toggleRegistration() {
   alternate.value = !alternate.value
   fieldTouched.value = false
@@ -141,7 +150,7 @@ function toggleRegistration() {
 function pressKey(key: string) {
   if (key === 'clear') uid.value = ''
   else if (key === 'backspace') uid.value = uid.value.slice(0, -1)
-  else if (uid.value.length < 20) uid.value += key
+  else if (uid.value.length < 8) uid.value += key
   fieldTouched.value = true
 }
 
@@ -151,11 +160,25 @@ function keyLabel(key: string) {
   return key
 }
 
-function submit() {
+async function submit() {
   fieldTouched.value = true
   if (!ready.value) return
   if (alternate.value) {
-    emit('register', { uid: nickname.value.trim(), nickname: nickname.value.trim(), email: email.value.trim() })
+    const value = nickname.value.trim()
+    const publicName = emailIsValid.value ? (value[0] + '***@' + value.split('@')[1]).slice(0, 40) : value
+    let identity = publicName
+    if (emailIsValid.value) {
+      const normalized = value.toLowerCase()
+      if (globalThis.crypto?.subtle) {
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+        identity = 'email:' + Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('')
+      } else {
+        let hash = 2166136261
+        for (const char of normalized) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619)
+        identity = 'email:local-' + (hash >>> 0).toString(16)
+      }
+    }
+    emit('register', { uid: identity, nickname: publicName })
     return
   }
   emit('register', { uid: uid.value.trim() })
@@ -163,11 +186,11 @@ function submit() {
 </script>
 
 <template>
-  <main class="kiosk" :lang="locale" @contextmenu.prevent>
-    <div class="language-switch" :class="{ 'language-switch--game': currentScreen === 'game' }" role="group" :aria-label="t('Game language')" :inert="timedOut || loading" :aria-hidden="timedOut || loading">
+  <main class="kiosk" :lang="locale" @contextmenu.prevent @pointerdown.capture="closeKeypadOutside">
+    <div v-if="currentScreen === 'idle'" class="language-switch" role="group" :aria-label="t('Game language')" :inert="timedOut || loading" :aria-hidden="timedOut || loading">
       <button type="button" :aria-label="locale === 'en' ? 'Переключить на русский' : 'Switch to English'"
         @click="setLocale(locale === 'en' ? 'ru' : 'en')">
-        <img :src="locale === 'en' ? languageEn : languageRu" alt="" draggable="false">
+        <img :src="locale === 'en' ? languageRu : languageEn" alt="" draggable="false">
       </button>
     </div>
     <Transition name="screen" @before-leave="disableLeavingScreen">
@@ -175,9 +198,8 @@ function submit() {
       <div v-if="currentScreen !== 'game'" class="coinw-logo" role="img" aria-label="CoinW"></div>
 
       <template v-if="currentScreen === 'idle'">
-        <div class="idle-art" aria-hidden="true"></div>
-        <div class="idle-shimmer" aria-hidden="true"></div>
-        <h1 class="challenge-title"><span>{{ t('Football') }}</span><span>{{ t('Challenge') }}</span></h1>
+        <IdleArtwork />
+        <h1 class="challenge-title"><template v-if="locale === 'en'"><span class="challenge-title__vectors" aria-label="Football Challenge"><img :src="footballTitle" alt=""><img :src="challengeTitle" alt=""></span></template><template v-else><span>{{ t('Football') }}</span><span>{{ t('Challenge') }}</span></template></h1>
         <div class="kiosk-actions kiosk-actions--idle">
           <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary" @click="emit('leaderboard')">
             <span>{{ t('LEADERBOARD') }}</span>
@@ -242,31 +264,35 @@ function submit() {
         <div class="registration-art" aria-hidden="true"></div>
         <div class="registration-panel" :class="{ 'registration-panel--alternate': alternate }">
           <template v-if="alternate">
-            <input v-model="nickname" class="kiosk-field" :aria-label="t('Nickname')" :placeholder="t('Enter your nickname')" maxlength="40" autocomplete="off" required @input="fieldTouched = true">
-            <input v-model="email" class="kiosk-field" :aria-label="t('Email')" type="email" :placeholder="t('Enter your email')" maxlength="254" autocomplete="off" required
-              :aria-invalid="!!error" :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true">
+            <input v-model="nickname" class="kiosk-field" :aria-label="t('Nickname or email')" :placeholder="t('Enter your nickname or email')" maxlength="254" autocomplete="off" required :aria-invalid="!!error" :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true">
           </template>
           <label v-else class="uid-field">
             <input id="uid" v-model="uid" class="kiosk-field" aria-label="CoinW UID" inputmode="none" autocomplete="off"
-              :placeholder="t('Enter your CoinW UID')" maxlength="20" required :aria-invalid="!!error"
-              :aria-describedby="error ? 'registration-error' : 'uid-hint'" @input="fieldTouched = true">
-            <span class="keyboard-icon" aria-hidden="true"><i></i></span>
+              :placeholder="t('Enter your CoinW UID')" maxlength="8" required :aria-invalid="!!error"
+              :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true" @focus="keypadOpen = true" @click="keypadOpen = true">
+            <span class="keyboard-icon" aria-hidden="true"></span>
           </label>
           <p v-if="error" id="registration-error" class="registration-error" role="alert">{{ t(error) }}</p>
-          <p v-else-if="!alternate" id="uid-hint" class="registration-hint">{{ t('Use the keypad to enter your CoinW UID.') }}</p>
-          <div v-if="!alternate" class="uid-keypad" role="group" :aria-label="t('UID keypad')">
+
+<button v-if="!alternate && keypadOpen" type="button" class="keypad-close" @click="keypadOpen = false">{{ t('Close keypad') }}</button>
+          <div v-if="!alternate && keypadOpen" class="uid-keypad" role="group" :aria-label="t('UID keypad')">
             <button v-for="key in keypad" :key="key" type="button" class="uid-key" :aria-label="t(keyLabel(key))"
               :class="{ 'uid-key--command': key === 'clear' || key === 'backspace' }" @click="pressKey(key)">
               {{ key === 'clear' ? t('CLEAR') : key === 'backspace' ? '⌫' : key }}
             </button>
           </div>
-          <button v-if="allowAlternative" type="button" class="registration-alternative" @click="toggleRegistration">
-            {{ t(alternate ? 'Use CoinW UID instead' : 'Use nickname and email instead') }}
+          <div v-if="allowAlternative && !keypadOpen && !alternate" class="registration-or"><span>{{ t('or') }}</span></div>
+          <button v-if="allowAlternative && (!keypadOpen || alternate)" type="button" class="registration-alternative" @click="toggleRegistration">
+            {{ t(alternate ? 'Use CoinW UID instead' : 'Use nickname or email instead') }}
           </button>
+          <p v-if="!keypadOpen || alternate" class="registration-consent">{{ t('By continuing, you agree to') }} <button type="button" class="policy-link" @click="policyOpen = true">{{ t('the terms of personal data') }}</button> {{ t('processing in accordance with the rules provided by the organizer.') }}</p>
+        </div>
+        <div v-if="policyOpen" class="policy-overlay" role="dialog" aria-modal="true" :aria-label="t('Personal data policy')">
+          <div class="policy-card"><h2>{{ t('Personal data policy') }}</h2><p>{{ t('Policy text will be provided by the organizer.') }}</p><button type="button" class="kiosk-button kiosk-button--cut-left" @click="policyOpen = false"><span>{{ t('BACK') }}</span></button></div>
         </div>
         <div class="kiosk-actions">
-          <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary kiosk-button--short" @click="emit('back')">
-            <span>{{ t('BACK') }}</span>
+          <button type="button" class="kiosk-button kiosk-button--home" :aria-label="t('Back to home')" @click="emit('finish')">
+            <span class="house-icon" aria-hidden="true"></span>
           </button>
           <button type="submit" class="kiosk-button kiosk-button--cut-left" :disabled="!ready">
             <span>{{ t('START GAME') }}</span>
@@ -300,11 +326,11 @@ function submit() {
               </div>
             </div>
           </div>
-          <p v-if="saveMessage" class="result-notice" role="status">{{ t(saveMessage) }}</p>
+
         </section>
         <div class="kiosk-actions">
-          <button type="button" class="kiosk-button kiosk-button--cut-right kiosk-button--secondary kiosk-button--short" @click="emit('finish')">
-            <span>{{ t('FINISH') }}</span>
+          <button type="button" class="kiosk-button kiosk-button--home" :aria-label="t('Back to home')" @click="emit('finish')">
+            <span class="house-icon" aria-hidden="true"></span>
           </button>
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('leaderboard')">
             <span>{{ t('VIEW LEADERBOARD') }}</span>
@@ -315,11 +341,10 @@ function submit() {
       <template v-else-if="currentScreen === 'leaderboard'">
         <div class="leaderboard-art" aria-hidden="true"><span class="ambient-arena"></span></div>
         <section class="leaderboard-panel" :class="{ 'leaderboard-panel--message': leaderboardStatus !== 'success' || !playerRecords.length }" :aria-label="t('Leaderboard')">
-          <h1>{{ t('TODAY’S LEADERBOARD') }}</h1>
-          <p class="leaderboard-caption">{{ t('Luka Modrić Football Challenge') }}</p>
+          <div class="leaderboard-header"><div class="leaderboard-header-card"><svg class="leaderboard-card-outline" viewBox="0 0 400 148" preserveAspectRatio="none" aria-hidden="true"><path class="leaderboard-card-shape" d="M32 2 H319 Q335 2 346 14 L389 59 Q398 68 398 80 V115 Q398 127 389 136 L383 142 Q378 146 366 146 H32 Q2 146 2 116 V32 Q2 20 11 12 L17 7 Q23 2 32 2 Z"/><path class="leaderboard-card-highlight" d="M235 2 H319 Q335 2 346 14 L389 59"/></svg><h1>TOP 10</h1></div><div class="leaderboard-header-card"><svg class="leaderboard-card-outline" viewBox="0 0 400 148" preserveAspectRatio="none" aria-hidden="true"><path class="leaderboard-card-shape" d="M32 2 H319 Q335 2 346 14 L389 59 Q398 68 398 80 V115 Q398 127 389 136 L383 142 Q378 146 366 146 H32 Q2 146 2 116 V32 Q2 20 11 12 L17 7 Q23 2 32 2 Z"/><path class="leaderboard-card-highlight" d="M235 2 H319 Q335 2 346 14 L389 59"/></svg><span>{{ t('PLAYERS TODAY') }}</span><strong>{{ formatNumber(leaderboardCount) }}</strong></div></div>
           <div v-if="leaderboardStatus === 'success' && playerRecords.length" class="leaderboard-scroll">
             <table class="leaderboard-table">
-              <thead><tr><th scope="col">#</th><th scope="col">{{ t('PLAYER') }}</th><th scope="col">{{ t('GOALS') }}</th><th scope="col">{{ t('POINTS') }}</th></tr></thead>
+              <thead><tr><th scope="col">{{ t('RANK') }}</th><th scope="col">{{ t('PLAYER') }}</th><th scope="col">{{ t('GOALS') }}</th><th scope="col">{{ t('POINTS') }}</th></tr></thead>
               <tbody>
                 <tr v-for="(entry, index) in playerRecords" :key="entry.id ?? index" :class="{ 'leaderboard-current': isCurrent(entry) }">
                   <th scope="row">
@@ -327,9 +352,9 @@ function submit() {
                       <img class="rank-medal" :src="rankMedals[entry.rank ?? index + 1]" alt="">
                       <span class="sr-only">{{ entry.rank ?? index + 1 }}</span>
                     </template>
-                    <template v-else>{{ entry.rank ?? index + 1 }}</template>
+                    <span v-else class="rank-number">{{ entry.rank ?? index + 1 }}</span>
                   </th>
-                  <td :title="entry.playerId">{{ entry.playerId }}<span v-if="isCurrent(entry)" class="current-tag">{{ t('YOU') }}</span></td>
+                  <td :title="entry.playerId">{{ entry.playerId }}</td>
                   <td>{{ entry.goals }}</td>
                   <td><strong>{{ formatNumber(entry.score) }}</strong></td>
                 </tr>
@@ -350,10 +375,14 @@ function submit() {
               <p v-else>{{ t('No results yet') }}</p>
             </div>
           </template>
+          <div v-if="currentEntry" class="leaderboard-result">
+            <span class="white-pill">{{ t('Your result') }}</span>
+            <div class="leaderboard-result-row"><span class="rank-number">{{ currentEntry.rank }}</span><span>{{ currentEntry.playerId }}</span><span>{{ currentEntry.goals }}</span><strong>{{ formatNumber(currentEntry.score) }}</strong></div>
+          </div>
         </section>
         <div class="kiosk-actions">
           <button type="button" class="kiosk-button kiosk-button--cut-left" @click="emit('newGame')">
-            <span>{{ t('NEW GAME') }}</span>
+            <span>{{ t('HOME') }}</span>
           </button>
         </div>
       </template>

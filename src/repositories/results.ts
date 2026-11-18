@@ -21,14 +21,15 @@ export function getDubaiDay(date = new Date()): string {
 }
 
 export function playerKey(result: Pick<GameResult, 'uid' | 'nickname'>): string {
+  if (result.uid.startsWith('email:')) return result.uid
   if (!result.nickname) return `uid:${result.uid}`
   return `nickname:${result.nickname.normalize('NFKC').toLocaleLowerCase('en')}`
 }
 
 export function publicPlayerName(result: Pick<GameResult, 'uid' | 'nickname'>): string {
   if (result.nickname) return result.nickname
-  const visible = Math.min(3, Math.floor(result.uid.length / 2))
-  return '••••' + (visible ? result.uid.slice(-visible) : '')
+  const visible = Math.min(2, Math.floor((result.uid.length - 1) / 2))
+  return visible > 0 ? `UID ${result.uid.slice(0, visible)}***${result.uid.slice(-visible)}` : 'UID ***'
 }
 
 function compareResults(a: GameResult, b: GameResult): number {

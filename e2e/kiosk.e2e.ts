@@ -15,7 +15,7 @@ async function openRegistration(page: Page) {
 
 async function openGame(page: Page) {
   await openRegistration(page)
-  await page.getByRole('textbox', { name: /CoinW UID/i }).fill('123456')
+  await page.getByRole('textbox', { name: /CoinW UID/i }).fill('12345678')
   await start(page).click()
 }
 
@@ -61,6 +61,12 @@ test('START GAME has hover and keyboard focus, and UID gates the start button', 
   await uid.fill('')
   await page.getByRole('button', { name: '1', exact: true }).click()
   await expect(uid).toHaveValue('1')
+  await expect(start(page)).toBeDisabled()
+  await uid.fill('1234567')
+  await expect(start(page)).toBeDisabled()
+  await page.getByRole('button', { name: '8', exact: true }).click()
+  await page.getByRole('button', { name: '9', exact: true }).click()
+  await expect(uid).toHaveValue('12345678')
   await expect(start(page)).toBeEnabled()
 })
 
@@ -68,6 +74,8 @@ test('five corner goals reach 1,000 and display the masked daily leaderboard', a
   test.setTimeout(45000)
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.clock.install()
   await openGame(page)
   for (const dx of [254, -254, 254, -254, 254]) {
     await swipe(page, dx, -375)
@@ -77,36 +85,31 @@ test('five corner goals reach 1,000 and display the masked daily leaderboard', a
   await expect(page.getByText(/^1[ ,\u00a0\u202f]?000$/)).toBeVisible()
   await expect(page.getByText('#1', { exact: true })).toBeVisible()
   await expect(ball(page)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /^Finish$/i })).toBeVisible()
-  // The idle hero loops forever; disable decorative motion before checking its buttons.
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.clock.install()
+  await expect(page.getByRole('button', { name: 'Back to home' })).toBeVisible()
   await page.clock.fastForward(12_200)
   await expect(play(page)).toBeVisible()
   await page.getByRole('button', { name: /^Leaderboard$/i }).click()
-  await expect(page.getByText('••••456', { exact: true })).toBeVisible()
-  await expect(page.getByText('123456', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: /^New Game$/i }).click()
-  await expect(page.getByRole('region', { name: 'How to play' })).toBeVisible()
+  await expect(page.getByText('UID 12***78', { exact: true })).toBeVisible()
+  await expect(page.getByText('12345678', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'HOME', exact: true }).click()
+  await expect(play(page)).toBeVisible()
   expect(errors).toEqual([])
 })
 
-test('keeper saves slower upper-corner shots on both sides while a wide strong shot scores', async ({ page }) => {
+test('a reachable corner shot can be saved and a strong wide shot can score', async ({ page }) => {
   await openGame(page)
-  for (const dx of [-158, 158]) {
-    await swipe(page, dx, -359, 700)
-    await outcome(page, 'SAVED')
-  }
-  await swipe(page, -215, -375)
+  await swipe(page, -158, -359, 700)
+  await outcome(page, 'SAVED')
+  await swipe(page, 215, -375)
   await outcome(page, 'GOAL')
 })
 
 for (const reducedMotion of ['no-preference', 'reduce'] as const) {
-  test(`repeated fast upper-corner shots trigger visible flight and saves (${reducedMotion})`, async ({ page }) => {
+  test(`repeated central shots have visible flight and can both score and be saved (${reducedMotion})`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion })
     await openGame(page)
-    for (const expected of ['GOAL', 'SAVED', 'SAVED']) {
-      await swipe(page, 254, -375)
+    for (const expected of ['SAVED', 'GOAL', 'SAVED']) {
+      await swipe(page, 0, -310)
       // Essential flight must not collapse to an instant result in accessibility mode.
       await page.waitForTimeout(200)
       await expect(page.getByRole('status').getByText(/^(SAVED|GOAL)$/)).toHaveCount(0)
@@ -135,14 +138,17 @@ test('short swipes cost no attempt, a save and a miss earn zero, and aborted rou
 })
 
 test('warnings offer resume and abandoned screens return to the start', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.clock.install()
   await openRegistration(page)
-  await page.clock.fastForward(10_200)
+  await page.clock.fastForward(40_000)
   let warning = page.getByRole('alertdialog')
+  await expect(warning).toHaveCount(0)
+  await page.clock.fastForward(5_200)
   await expect(warning).toBeVisible()
   await warning.getByRole('button', { name: /^Continue$/i }).click()
   await expect(warning).toHaveCount(0)
-  await page.clock.fastForward(15_200)
+  await page.clock.fastForward(60_200)
   await expect(play(page)).toBeVisible()
 
   await openGame(page)
@@ -150,36 +156,47 @@ test('warnings offer resume and abandoned screens return to the start', async ({
   await expect(page.locator('.ball-control')).toBeDisabled()
   await page.clock.fastForward(3_200)
   await expect(ball(page)).toBeEnabled()
-  await page.clock.fastForward(15_200)
+  await page.clock.fastForward(45_200)
   warning = page.getByRole('alertdialog')
   await expect(warning).toBeVisible()
   await expect(page.locator('.ball-control')).toBeDisabled()
-  await page.clock.fastForward(5_000)
+  await page.clock.fastForward(15_000)
   await expect(play(page)).toBeVisible()
 })
 
-test('fallback validates email and highlights a player below the top ten', async ({ page }) => {
-  await page.addInitScript(() => {
-    const rows = Array.from({ length: 10 }, (_, index) => ({
-      id: 'prior-' + index, uid: String(1000 + index), score: 1000,
-      goals: 5, cornerGoals: 5, shots: 5, date: new Date().toISOString(),
-    }))
-    localStorage.setItem('coinw-football-results-v1', JSON.stringify(rows))
+for (const [identity, publicName] of [
+  ['Local player', 'Local player'],
+  ['player@example.test', 'p***@example.test'],
+]) {
+  test(`alternate registration highlights ${publicName} below the top ten`, async ({ page }) => {
+    await page.addInitScript(() => {
+      const rows = Array.from({ length: 10 }, (_, index) => ({
+        id: 'prior-' + index, uid: String(1000 + index), score: 1000,
+        goals: 5, cornerGoals: 5, shots: 5, date: new Date().toISOString(),
+      }))
+      localStorage.setItem('coinw-football-results-v1', JSON.stringify(rows))
+    })
+    await openRegistration(page)
+    await page.getByRole('button', { name: /use nickname/i }).click()
+    const field = page.getByRole('textbox', { name: 'Nickname or email' })
+    await expect(page.getByRole('textbox')).toHaveCount(1)
+    await field.fill('invalid@')
+    await expect(start(page)).toBeDisabled()
+    await field.fill(identity)
+    await expect(start(page)).toBeEnabled()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await start(page).click()
+    for (let i = 0; i < 5; i++) await swipe(page, 0, -310)
+    await expect(page.getByText('#11', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /^View Leaderboard$/i }).click()
+    const personalResult = page.locator('.leaderboard-result-row')
+    await expect(personalResult.getByText(publicName, { exact: true })).toBeVisible()
+    await expect(personalResult.getByText('11', { exact: true })).toBeVisible()
+    if (identity.includes('@')) {
+      expect(await page.evaluate(email => Object.values(localStorage).some(value => value.includes(email)), identity)).toBe(false)
+    }
   })
-  await openRegistration(page)
-  await page.getByRole('button', { name: /use nickname/i }).click()
-  await page.getByRole('textbox', { name: /^Nickname$/i }).fill('Local player')
-  await page.getByRole('textbox', { name: /^Email$/i }).fill('invalid')
-  await expect(start(page)).toBeDisabled()
-  await page.getByRole('textbox', { name: /^Email$/i }).fill('player@example.test')
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await start(page).click()
-  for (let i = 0; i < 5; i++) await swipe(page, 0, -310)
-  await expect(page.getByText('#11', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /^View Leaderboard$/i }).click()
-  await expect(page.getByRole('row').filter({ hasText: 'Local player' })).toContainText('11')
-  expect(await page.evaluate(() => !Object.values(localStorage).some(value => value.includes('player@example.test')))).toBe(true)
-})
+}
 
 test.describe('portrait touch', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 640 }, reducedMotion: 'reduce' })
@@ -271,10 +288,10 @@ test('slow game assets hold the initial loader without consuming playing time', 
   await expect(play(page)).toBeVisible({ timeout: 10000 })
   await play(page).click()
   await continueButton(page).click()
-  await page.getByRole('textbox', { name: /CoinW UID/i }).fill('123456')
+  await page.getByRole('textbox', { name: /CoinW UID/i }).fill('12345678')
   await start(page).click()
   await expect(page.locator('.game-countdown strong')).toHaveText('3')
   await page.clock.runFor(3100)
   await expect(ball(page)).toBeEnabled()
-  await expect(page.locator('.game-clock')).toContainText('20s')
+  await expect(page.locator('.game-clock')).toHaveCount(0)
 })

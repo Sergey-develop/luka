@@ -59,9 +59,10 @@ describe('local results', () => {
   })
 
   it('masks UID even when short and uses a supplied nickname as the public name', () => {
-    expect(publicPlayerName(result)).toBe('••••456')
-    expect(publicPlayerName({ uid: '1' })).toBe('••••')
-    expect(publicPlayerName({ uid: 'Guest', nickname: 'Guest' })).toBe('Guest')
+    expect(publicPlayerName(result)).toBe('UID 12***56')
+    expect(publicPlayerName({ uid: '1' })).toBe('UID ***')
+    expect(publicPlayerName({ uid: '123', nickname: 'A long nickname' })).toBe('A long nickname')
+    expect(publicPlayerName({ uid: '123' })).toBe('UID 1***3')
   })
 
   it('propagates storage failures', async () => {

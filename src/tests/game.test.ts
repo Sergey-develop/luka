@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { gameConfig } from '../config/game'
 import { GameEngine } from '../game/engine'
-import { evaluateSwipe, zoneAtGoalLine, constrainSwipe, flightPosition } from '../game/physics'
+import { evaluateSwipe, zoneAtGoalLine, constrainSwipe, flightPosition, shotPower } from '../game/physics'
 import type { Swipe } from '../types/game'
 
 const upperLeft: Swipe = { dx: -254, dy: -375, durationMs: 100 }
@@ -12,7 +12,7 @@ function createRound() {
   const game = new GameEngine()
   game.openInstructions()
   game.openRegistration()
-  game.register({ uid: '12345' })
+  game.register({ uid: '12345678' })
   game.start()
   return game
 }
@@ -41,29 +41,37 @@ describe('swipe physics', () => {
     }
   })
 
-  it('can save either upper corner, but faster shots can beat the same dive', () => {
+  it('allows shots into either upper corner to beat the keeper', () => {
     for (const sign of [-1, 1]) {
       const gesture = { dx: sign * 158, dy: -359 }
       const zone = sign < 0 ? 'top-left' : 'top-right'
       const slower = evaluateSwipe({ ...gesture, durationMs: 800 }, 2)!
       const faster = evaluateSwipe({ ...gesture, durationMs: 100 }, 2)!
-      expect(slower).toMatchObject({ zone, outcome: 'saved', points: 0 })
+      expect(slower).toMatchObject({ zone, outcome: 'goal', points: 200 })
       expect(faster).toMatchObject({ zone, outcome: 'goal', points: 200 })
-      expect(slower.keeper.y).toBeLessThan(gameConfig.keeper.start.y - 40)
+      expect(slower.keeper.y).toBeLessThan(gameConfig.keeper.start.y)
       expect(Math.sign(slower.keeper.x - gameConfig.keeper.start.x)).toBe(sign)
-      // Quicker reactions also allow a save against the fast corner shot.
+      // A quicker reaction can stop the same shot on another attempt.
       expect(evaluateSwipe({ ...gesture, durationMs: 100 }, 0)?.outcome).toBe('saved')
     }
   })
 
-  it('does not concede every repeated fast shot into either upper corner', () => {
+  it('allows fast shots into either upper corner', () => {
     for (const sign of [-1, 1]) {
       const shots = Array.from({ length: gameConfig.maxShots }, (_, attempt) =>
         evaluateSwipe({ dx: sign * 215, dy: -375, durationMs: 80 }, attempt)!)
       expect(shots.every(shot => shot.zone === (sign < 0 ? 'top-left' : 'top-right'))).toBe(true)
-      expect(shots.filter(shot => shot.outcome === 'saved').length).toBeGreaterThanOrEqual(2)
+      expect(shots.filter(shot => shot.outcome === 'goal').length).toBeGreaterThanOrEqual(4)
       expect(shots.some(shot => shot.outcome === 'goal')).toBe(true)
-      expect(shots.every(shot => Math.abs(shot.keeper.x - 270) > 80 && shot.keeper.y < 400)).toBe(true)
+      expect(shots.every(shot => Math.abs(shot.keeper.x - 270) > 20 && shot.keeper.y < 430)).toBe(true)
+    }
+  })
+
+  it('balances repeated ordinary centre and corner shots across a five-shot round', () => {
+    for (const gesture of [{ dx: 0, dy: -310, durationMs: 800 }, { dx: 158, dy: -359, durationMs: 100 }]) {
+      const outcomes = Array.from({ length: 5 }, (_, attempt) => evaluateSwipe(gesture, attempt)!.outcome)
+      expect(outcomes).toContain('goal')
+      expect(outcomes).toContain('saved')
     }
   })
 
@@ -105,14 +113,21 @@ describe('swipe physics', () => {
     })
   })
 
+  it('lets a hard straight shot beat a keeper diving the wrong way', () => {
+    const hard = { dx: 0, dy: -310, durationMs: 100 }
+    expect(evaluateSwipe(hard, 1)).toMatchObject({ zone: 'center', outcome: 'goal', points: 100 })
+    expect(evaluateSwipe(hard, 0)).toMatchObject({ zone: 'center', outcome: 'saved' })
+    expect(evaluateSwipe({ ...hard, durationMs: 800 }, 1)).toMatchObject({ zone: 'center', outcome: 'goal' })
+  })
+
   it('uses the same keeper reaction for equivalent attempts and swipes', () => {
     const result = evaluateSwipe(straight, 0)
     expect(result).toMatchObject({
       zone: 'center', outcome: 'saved', points: 0,
     })
     expect(evaluateSwipe(straight, 0)).toEqual(result)
-    expect(evaluateSwipe(straight, 1)).toMatchObject({ zone: 'center', outcome: 'saved' })
-    expect(evaluateSwipe({ dx: 0, dy: -400 }, 0)?.flightMs).toBeLessThan(result!.flightMs)
+    expect(evaluateSwipe(straight, 1)).toMatchObject({ zone: 'center', outcome: 'goal' })
+    expect(shotPower({ dx: 0, dy: -240, durationMs: 150 })).toBeGreaterThanOrEqual(.9)
   })
 })
 
@@ -145,7 +160,7 @@ describe('five-shot session', () => {
     expect(game.result().id).toBe(game.result().id)
   })
 
-  it('reads repeated fast shots even into the farthest upper corner', () => {
+  it('tracks repeated fast shots into the farthest upper corner', () => {
     for (const gesture of [upperLeft, upperRight]) {
       const game = createRound()
       expect(game.shoot(gesture)?.outcome).toBe('goal')
@@ -153,8 +168,8 @@ describe('five-shot session', () => {
       game.next()
       for (let attempt = 1; attempt < 5; attempt++) {
         const shot = game.shoot(gesture)!
-        expect(shot.outcome).toBe('saved')
-        expect(shot.reactionMs).toBeLessThan(100)
+        expect(shot.outcome).toBe('goal')
+        expect(shot.reactionMs).toBeLessThanOrEqual(190)
         game.resolveShot()
         game.next()
       }
@@ -171,6 +186,8 @@ describe('five-shot session', () => {
     game.openRegistration()
     expect(() => game.register({ uid: ' ' })).toThrow()
     expect(() => game.register({ uid: 'ABC' })).toThrow()
+    expect(() => game.register({ uid: '1234567' })).toThrow()
+    expect(() => game.register({ uid: '123456789' })).toThrow()
     game.register({ uid: 'A local name', nickname: 'A local name' })
     expect(game.phase).toBe('countdown')
     expect(() => game.shoot(straight)).toThrow()

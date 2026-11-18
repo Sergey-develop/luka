@@ -15,6 +15,19 @@ export function setLocale(value: Locale) {
   try { localStorage.setItem(storageKey, value) } catch { /* Still switch if storage is unavailable. */ }
 }
 const russian: Record<string, string> = {
+  "Enter exactly 8 digits for your CoinW UID.": "CoinW UID должен содержать ровно 8 цифр.",
+  "Nickname or email": "Никнейм или почта",
+  "Enter your nickname or email": "Введите никнейм или почту",
+  "or": "или",
+  "Close keypad": "Закрыть клавиатуру",
+  "By continuing, you agree to": "Продолжая, вы соглашаетесь с",
+  "the terms of personal data": "условиями обработки персональных данных",
+  "processing in accordance with the rules provided by the organizer.": "в соответствии с правилами организатора.",
+  "Personal data policy": "Политика обработки персональных данных",
+  "Policy text will be provided by the organizer.": "Текст политики будет предоставлен организатором.",
+  "HOME": "НА ГЛАВНУЮ",
+  "PLAYERS TODAY": "ИГРОКОВ СЕГОДНЯ",
+  "RANK": "МЕСТО",
   "PREPARING YOUR GAME": "ГОТОВИМ ИГРУ",
   "COULD NOT LOAD THE GAME": "НЕ УДАЛОСЬ ЗАГРУЗИТЬ ИГРУ",
   "Loading everything for a smooth game.": "Загружаем всё для игры без ожидания.",
@@ -55,7 +68,7 @@ const russian: Record<string, string> = {
   "Clear UID": "Очистить UID",
   "Delete last digit": "Удалить последнюю цифру",
   "Use CoinW UID instead": "Войти по CoinW UID",
-  "Use nickname and email instead": "Войти по никнейму и почте",
+  "Use nickname or email instead": "Войти по никнейму или почте",
   "BACK": "НАЗАД",
   "Your result": "Твой результат",
   "Score and goals": "Очки и голы",

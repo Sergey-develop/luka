@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Application, Assets, Graphics, Sprite } from 'pixi.js'
 import { gsap } from 'gsap'
+import { animateKeeper, readyStance } from './keeperAnimation'
 import { gameAudio } from '../../audio/gameAudio'
 import backgroundUrl from '../../assets/stadium-clean.webp'
 import keeperIdleUrl from '../../assets/keeper-idle-clean.png'
@@ -25,7 +26,6 @@ const props = defineProps<{
   shots: number
   countdown: number | null
   countdownProgress: number
-  secondsLeft: number
 }>()
 const emit = defineEmits<{ swipe: [gesture: Swipe]; complete: []; home: []; ready: []; loadError: [] }>()
 
@@ -100,17 +100,13 @@ let timeline: gsap.core.Timeline | undefined
 let destroyed = false
 let shadow: Graphics | undefined
 let trail: Graphics | undefined
-let keeperRest: gsap.core.Tween | undefined
+let keeperRest: gsap.core.Timeline | undefined
 let tensionTween: gsap.core.Tween | undefined
 
 function restKeeper() {
   if (!idle || destroyed) return
   keeperRest?.kill()
-  idle.position.set(270, 455)
-  idle.rotation = 0
-  idle.width = 180
-  idle.height = 180
-  if (props.active && !reducedMotion()) keeperRest = gsap.to(idle, { y: 452, rotation: .012, duration: .85, repeat: -1, yoyo: true, ease: 'sine.inOut' })
+  keeperRest = readyStance(idle, props.active && !reducedMotion())
 }
 
 function moveSwipe(event: PointerEvent) {
@@ -259,7 +255,18 @@ async function init() {
     shadow = new Graphics().ellipse(0, 0, 65, 10).fill({ color: 0x100622, alpha: .35 })
     shadow.position.set(ballStart.x, ballStart.y + 60)
     trail = new Graphics()
-    instance.stage.addChild(bg, idle, dive, shadow, trail, ball)
+    const feetShadow = new Graphics().ellipse(0, 0, 53, 5).fill({ color: 0x191031, alpha: .26 })
+    const stance = idle
+    const airborne = dive
+    feetShadow.position.set(field.ballStart.x, 545)
+    instance.ticker.add(() => {
+      const pose = airborne.visible && airborne.alpha > stance.alpha ? airborne : stance
+      const lift = Math.max(0, Math.min(1, (455 - pose.y) / 120))
+      feetShadow.x = pose.x
+      feetShadow.scale.set(1 - lift * .42)
+      feetShadow.alpha = 1 - lift * .55
+    })
+    instance.stage.addChild(bg, feetShadow, idle, dive, shadow, trail, ball)
     restKeeper()
     host.value?.appendChild(instance.canvas)
     instance.render()
@@ -288,37 +295,17 @@ function animate(shot: AnimatedShot) {
   keeperRest?.kill()
   tensionTween?.kill()
   result.value = null
-  idleSprite.alpha = 1
-  diveSprite.alpha = 0
-  diveSprite.visible = true
   const direction = shot.keeper.x < ballStart.x ? -1 : 1
-  const hand = shot.outcome === 'saved' ? shot.target : shot.keeper
-  const central = Math.abs(shot.target.x - ballStart.x) < 65
   const reduced = reducedMotion()
   // Ball flight and saves are essential gameplay, including reduced-motion mode.
   const flight = Math.max(animation.minFlightMs, shot.flightMs) / 1000
   const windup = .12
   const arrive = windup + flight
   const react = windup + shot.reactionMs / shot.flightMs * flight
-  const travel = Math.max(0, arrive - react)
   const hold = animation.resultMs / 1000
   const start = { x: ballSprite.x, y: ballSprite.y, size: ballSprite.width }
   const motion = { t: 0 }
   const points: { x: number; y: number }[] = []
-  const highDive = hand.y < gameConfig.keeper.start.y - 20
-  const rotation = (highDive ? -.25 : .35) * direction
-  const gloveX = 126 * direction
-  const gloveY = -59
-  const keeperX = hand.x - (gloveX * Math.cos(rotation) - gloveY * Math.sin(rotation))
-  const keeperY = hand.y - (gloveX * Math.sin(rotation) + gloveY * Math.cos(rotation))
-  diveSprite.width = 276
-  diveSprite.height = 198
-  diveSprite.scale.x = Math.abs(diveSprite.scale.x) * direction
-  const diveScale = { x: diveSprite.scale.x, y: diveSprite.scale.y }
-  diveSprite.scale.set(diveScale.x * .72, diveScale.y * .72)
-  diveSprite.position.set(270 - direction * 35, 490)
-  diveSprite.rotation = -.22 * direction
-
   timeline = gsap.timeline({ onComplete: () => emit('complete') })
   timeline.call(() => gameAudio.kick(), [], windup)
   timeline.to(motion, { t: 1, duration: flight, ease: 'none', onUpdate: () => {
@@ -345,44 +332,13 @@ function animate(shot: AnimatedShot) {
       })
     }
   } }, windup)
-  // Crouch, push off, reach the simulated interception point, then land.
-  timeline.to(idleSprite, { height: 165, y: 462, duration: .12, ease: 'power2.in' }, 0)
-  if (central) {
-    const catchY = hand.y + 22
-    timeline.to(idleSprite, { x: hand.x, height: 190, rotation: .025 * direction,
-      duration: travel * .45, ease: 'power2.out' }, react)
-    timeline.to(idleSprite, { y: Math.min(catchY, 455) - 52,
-      duration: travel * .55, ease: 'power2.out' }, react)
-    timeline.to(idleSprite, { y: catchY,
-      duration: travel * .45, ease: 'power1.in' }, react + travel * .55)
-    timeline.to(idleSprite, { y: 466, height: 158, rotation: 0,
-      duration: reduced ? 0 : .2, ease: 'power2.in' }, arrive)
-    timeline.to(idleSprite, { y: 455, height: 180,
-      duration: reduced ? 0 : .25, ease: 'power2.out' }, arrive + (reduced ? 0 : .2))
-  } else {
-    timeline.to(idleSprite, { alpha: 0, x: 270 + direction * 22, duration: .1 }, react)
-    timeline.to(diveSprite, { alpha: 1, duration: .1 }, react)
-    timeline.to(diveSprite.scale, { ...diveScale, duration: travel * .7, ease: 'power1.out' }, react)
-    timeline.to(diveSprite, { x: keeperX, rotation, duration: travel, ease: 'power1.out' }, react)
-    if (highDive) {
-      // Reach a high ball at the apex; do not start falling before contact.
-      timeline.to(diveSprite, { y: keeperY, duration: travel, ease: 'sine.out' }, react)
-    } else {
-      timeline.to(diveSprite, { y: Math.min(keeperY, 455) - 24, duration: travel * .55, ease: 'power2.out' }, react)
-      timeline.to(diveSprite, { y: keeperY, duration: travel * .45, ease: 'power1.in' }, react + travel * .55)
-    }
-    timeline.to(diveSprite, { y: Math.max(keeperY, 477), rotation: direction * .38,
-      duration: highDive ? .42 : .25, ease: 'power2.in' }, arrive)
-  }
+  animateKeeper(timeline, idleSprite, diveSprite, shot, react, arrive, hold, reduced)
   timeline.call(() => { trail?.clear(); result.value = shot.outcome; gameAudio.result(shot.outcome) }, [], arrive)
   if (!reduced) {
     timeline.to(ballSprite, { x: shot.target.x + (shot.outcome === 'saved' ? -direction * 45 : 0),
       y: shot.outcome === 'saved' ? shot.target.y + 90 : shot.target.y + 35,
       alpha: 0, duration: .35, ease: 'power2.in' }, arrive)
   }
-  timeline.to(diveSprite, { alpha: 0, duration: reduced ? 0 : .2 }, arrive + hold - .3)
-  timeline.to(idleSprite, { alpha: 1, x: 270, y: 455, height: 180, rotation: 0,
-    duration: reduced ? 0 : .3, ease: 'power2.out' }, arrive + hold - .3)
   timeline.call(() => {
     result.value = null
     resetBall(ballSprite)
@@ -463,11 +419,6 @@ onBeforeUnmount(() => {
       <span class="home-icon" aria-hidden="true"></span>
     </button>
 
-    <div class="game-clock" :class="{ 'game-clock--urgent': secondsLeft <= 5 && countdown === null }" role="timer" :aria-label="t('Round timer')">
-      <span>{{ t('TIME LEFT') }}</span>
-      <strong>{{ Math.max(0, Math.ceil(secondsLeft)) }}{{ t('s') }}</strong>
-    </div>
-
     <Transition name="outcome">
       <div v-if="result" class="shot-result" :class="result" role="status">
         <strong>{{ t(result.toUpperCase()) }}</strong>
@@ -517,8 +468,8 @@ onBeforeUnmount(() => {
     ></button>
     <p id="game-keyboard-help" class="game-keyboard-help">{{ t('Use the arrow keys to aim, then press Enter or Space to shoot.') }}</p>
 
-    <div v-if="!ready || enabled || loadFailed" class="game-prompt" :role="loadFailed ? 'alert' : swipeHint ? 'status' : undefined">
-      {{ t(loadFailed ? 'GAME UNAVAILABLE. RETURN HOME TO RETRY.' : !ready ? 'LOADING GAME…' : swipeHint || (dragging ? 'LENGTH + SPEED = POWER · RELEASE TO SHOOT' : 'SWIPE UP · LENGTH + SPEED CONTROL THE SHOT')) }}
+    <div v-if="!ready || loadFailed || (enabled && (shots === 0 || swipeHint))" class="game-prompt" :role="loadFailed ? 'alert' : swipeHint ? 'status' : undefined">
+      {{ t(loadFailed ? 'GAME UNAVAILABLE. RETURN HOME TO RETRY.' : !ready ? 'LOADING GAME…' : swipeHint || 'Swipe from the ball to shoot') }}
     </div>
   </section>
 </template>
@@ -551,6 +502,7 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 .game-hud {
+  font-family: 'Satoshi Variable', Arial, sans-serif;
   position: absolute;
   top: 2.15%;
   left: 3.7%;
@@ -850,31 +802,6 @@ onBeforeUnmount(() => {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.game-clock {
-  position: absolute;
-  top: 11.65%;
-  right: 4%;
-  display: flex;
-  align-items: center;
-  gap: 1.5cqw;
-  min-height: 8.25cqw;
-  padding: 0 2.6cqw;
-  border: .18cqw solid #c9b6ff;
-  border-radius: 5cqw;
-  background: linear-gradient(150deg, #5530cc, #3111a2);
-  box-shadow: inset 0 0 1.6cqw #ac8afe73, 0 0 2cqw #be94ff86;
-  font-variant-numeric: tabular-nums;
-}
-.game-clock span {
-  color: #e3d4ff;
-  font-size: 1.72cqw;
-  font-weight: 700;
-}
-.game-clock strong { font-size: 3.3cqw; }
-.game-clock--urgent {
-  border-color: #ffa3ac;
-  background: linear-gradient(150deg, #a42e68, #5f123c);
-}
 .game-countdown {
   position: absolute;
   z-index: 4;
@@ -923,6 +850,7 @@ onBeforeUnmount(() => {
 }
 
 .game-prompt {
+  text-transform: uppercase;
   position: absolute;
   left: 6.3%;
   right: 5.3%;

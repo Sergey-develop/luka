@@ -3,7 +3,7 @@ import type { GameResult, Phase, Player, Shot, Swipe } from '../types/game'
 import { evaluateSwipe } from './physics'
 import { isCornerGoal, scoreShots } from './scoring'
 
-const uidPattern = /^\d{1,20}$/
+const uidPattern = /^\d{8}$/
 
 function sessionId(): string {
   // getRandomValues works on the kiosk's local HTTP network as well as HTTPS.
@@ -56,9 +56,9 @@ export class GameEngine {
     const nickname = player.nickname?.trim()
     if (nickname && gameConfig.alternativeRegistration) {
       if (nickname.length > 40) throw new Error('Enter a nickname up to 40 characters.')
-      this.player = { uid: nickname, nickname }
+      this.player = { uid: uid.startsWith('email:') ? uid : nickname, nickname }
     } else {
-      if (!uidPattern.test(uid)) throw new Error('Enter a valid CoinW UID (up to 20 digits).')
+      if (!uidPattern.test(uid)) throw new Error('Enter a valid CoinW UID (exactly 8 digits).')
       this.player = { uid }
     }
     this.phase = 'countdown'

@@ -35,13 +35,13 @@ async function prepareGame(retry = false) {
 const countdownRemainingMs = ref(0)
 const countdown = computed(() => engine.phase === 'countdown'
   ? Math.max(1, Math.ceil(countdownRemainingMs.value / 1000)) : null)
-const secondsLeft = ref(Math.ceil(timing.gameTimeoutMs / 1000))
 const timedOut = ref(false)
 const timeoutSeconds = ref<number | null>(null)
 const saveMessage = ref('')
 const resultRank = ref<number>()
 const currentResultId = ref<string | null>(null)
 const leaderboardStatus = ref<'loading' | 'success' | 'empty' | 'error'>('empty')
+const leaderboardCount = ref(0)
 const leaderboard = ref<{ id: string; playerId: string; score: number; goals: number; rank: number; date: string }[]>([])
 
 let shotId = 0
@@ -58,7 +58,6 @@ function resetActivity(now = Date.now()) {
   lastActivity = now
   timedOut.value = false
   timeoutSeconds.value = null
-  secondsLeft.value = Math.ceil(timing.gameTimeoutMs / 1000)
 }
 
 watch(() => engine.phase, (phase) => {
@@ -123,7 +122,6 @@ function tick() {
     home()
     return
   }
-  if (aiming) secondsLeft.value = remaining
   if (elapsed >= warning) {
     timedOut.value = true
     timeoutSeconds.value = remaining
@@ -215,6 +213,7 @@ async function refreshLeaderboard(now = new Date()) {
   try {
     const dailyResults = await repository.getLeaderboard(now)
     if (id !== requestId) return
+    leaderboardCount.value = dailyResults.length
     const currentKey = completedResult && playerKey(completedResult)
     const currentIndex = currentKey ? dailyResults.findIndex(row => playerKey(row) === currentKey) : -1
     currentResultId.value = currentIndex >= 0 ? dailyResults[currentIndex].id : null
@@ -265,6 +264,7 @@ function register(player: Player) {
     :save-message="saveMessage"
     :rank="resultRank"
     :leaderboard="leaderboard"
+    :leaderboard-count="leaderboardCount"
     :leaderboard-status="leaderboardStatus"
     :current-result-id="currentResultId"
     :allow-alternative="gameConfig.alternativeRegistration"
@@ -276,7 +276,7 @@ function register(player: Player) {
     @back="engine.back()"
     @finish="home"
     @resume="resetActivity()"
-    @new-game="openInstructions"
+    @new-game="home"
     @leaderboard="showLeaderboard"
   >
     <GameScene
@@ -285,7 +285,6 @@ function register(player: Player) {
       :shot="shot"
       :countdown="countdown"
       :countdown-progress="countdownRemainingMs / timing.countdownMs"
-      :seconds-left="secondsLeft"
       :disabled="engine.phase !== 'aiming' || timedOut"
       :score="engine.score"
       :goals="engine.goals"

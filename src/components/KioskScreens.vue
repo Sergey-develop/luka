@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import IdleArtwork from './IdleArtwork.vue'
+import TextKeyboard from './TextKeyboard.vue'
 import { locale, setLocale, t, formatNumber } from '../i18n'
 import languageEn from '../assets/art/language-en.png'
 import languageRu from '../assets/art/language-ru.png'
@@ -73,6 +74,7 @@ const uid = ref('')
 const keypadOpen = ref(false)
 const policyOpen = ref(false)
 const nickname = ref('')
+const nicknameInput = ref<HTMLInputElement | null>(null)
 const alternate = ref(false)
 const fieldTouched = ref(false)
 const resumeButton = ref<HTMLButtonElement | null>(null)
@@ -139,12 +141,33 @@ function isCurrent(entry: Entry) {
 
 function closeKeypadOutside(event: PointerEvent) {
   const target = event.target
-  if (keypadOpen.value && target instanceof Element && !target.closest('.uid-field, .uid-keypad, .keypad-close')) keypadOpen.value = false
+  if (keypadOpen.value && target instanceof Element && !target.closest('.registration-field, .uid-keypad, .text-keyboard, .keypad-close')) keypadOpen.value = false
 }
 
 function toggleRegistration() {
   alternate.value = !alternate.value
+  keypadOpen.value = false
   fieldTouched.value = false
+}
+
+function setTextKeyboardOpen(open: boolean) {
+  nicknameInput.value?.focus({ preventScroll: true })
+  keypadOpen.value = open
+}
+
+function editNickname(text: string) {
+  const input = nicknameInput.value
+  if (!input) return
+  let start = input.selectionStart ?? input.value.length
+  const end = input.selectionEnd ?? start
+  if (!text && start === end) {
+    const previousChar = Array.from(input.value.slice(0, start)).at(-1)
+    start -= previousChar?.length ?? 0
+  }
+  if (input.value.length - (end - start) + text.length > input.maxLength) return
+  input.setRangeText(text, start, end, 'end')
+  nickname.value = input.value
+  fieldTouched.value = true
 }
 
 function pressKey(key: string) {
@@ -260,13 +283,20 @@ async function submit() {
         </div>
       </template>
 
-      <form v-else-if="currentScreen === 'registration'" class="registration" novalidate @submit.prevent="submit">
+      <form v-else-if="currentScreen === 'registration'" class="registration" novalidate @submit.prevent="submit"
+        @keydown.esc="alternate && keypadOpen && setTextKeyboardOpen(false)">
         <div class="registration-art" aria-hidden="true"></div>
-        <div class="registration-panel" :class="{ 'registration-panel--alternate': alternate }">
-          <template v-if="alternate">
-            <input v-model="nickname" class="kiosk-field" :aria-label="t('Nickname or email')" :placeholder="t('Enter your nickname or email')" maxlength="254" autocomplete="off" required :aria-invalid="!!error" :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true">
-          </template>
-          <label v-else class="uid-field">
+        <div class="registration-panel" :class="{ 'registration-panel--alternate': alternate, 'registration-panel--typing': alternate && keypadOpen }">
+          <div v-if="alternate" class="registration-field">
+            <input ref="nicknameInput" v-model="nickname" class="kiosk-field" :aria-label="t('Nickname or email')"
+              :placeholder="t('Enter your nickname or email')" maxlength="254" inputmode="none" autocomplete="off"
+              autocapitalize="none" :spellcheck="false" required :aria-invalid="!!error"
+              :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true"
+              @focus="keypadOpen = true" @click="keypadOpen = true">
+            <button type="button" class="keyboard-icon" :aria-label="t(keypadOpen ? 'Close keypad' : 'Open keyboard')"
+              :aria-expanded="keypadOpen" @pointerdown.prevent @click="setTextKeyboardOpen(!keypadOpen)"></button>
+          </div>
+          <label v-else class="registration-field">
             <input id="uid" v-model="uid" class="kiosk-field" aria-label="CoinW UID" inputmode="none" autocomplete="off"
               :placeholder="t('Enter your CoinW UID')" maxlength="8" required :aria-invalid="!!error"
               :aria-describedby="error ? 'registration-error' : undefined" @input="fieldTouched = true" @focus="keypadOpen = true" @click="keypadOpen = true">
@@ -274,7 +304,8 @@ async function submit() {
           </label>
           <p v-if="error" id="registration-error" class="registration-error" role="alert">{{ t(error) }}</p>
 
-<button v-if="!alternate && keypadOpen" type="button" class="keypad-close" @click="keypadOpen = false">{{ t('Close keypad') }}</button>
+          <TextKeyboard v-if="alternate && keypadOpen && !timedOut" @insert="editNickname" @backspace="editNickname('')" @close="setTextKeyboardOpen(false)" />
+          <button v-if="!alternate && keypadOpen" type="button" class="keypad-close" @click="keypadOpen = false">{{ t('Close keypad') }}</button>
           <div v-if="!alternate && keypadOpen" class="uid-keypad" role="group" :aria-label="t('UID keypad')">
             <button v-for="key in keypad" :key="key" type="button" class="uid-key" :aria-label="t(keyLabel(key))"
               :class="{ 'uid-key--command': key === 'clear' || key === 'backspace' }" @click="pressKey(key)">
@@ -282,10 +313,10 @@ async function submit() {
             </button>
           </div>
           <div v-if="allowAlternative && !keypadOpen && !alternate" class="registration-or"><span>{{ t('or') }}</span></div>
-          <button v-if="allowAlternative && (!keypadOpen || alternate)" type="button" class="registration-alternative" @click="toggleRegistration">
+          <button v-if="allowAlternative && !keypadOpen" type="button" class="registration-alternative" @click="toggleRegistration">
             {{ t(alternate ? 'Use CoinW UID instead' : 'Use nickname or email instead') }}
           </button>
-          <p v-if="!keypadOpen || alternate" class="registration-consent">{{ t('By continuing, you agree to') }} <button type="button" class="policy-link" @click="policyOpen = true">{{ t('the terms of personal data') }}</button> {{ t('processing in accordance with the rules provided by the organizer.') }}</p>
+          <p v-if="!keypadOpen" class="registration-consent">{{ t('By continuing, you agree to') }} <button type="button" class="policy-link" @click="policyOpen = true">{{ t('the terms of personal data') }}</button> {{ t('processing in accordance with the rules provided by the organizer.') }}</p>
         </div>
         <div v-if="policyOpen" class="policy-overlay" role="dialog" aria-modal="true" :aria-label="t('Personal data policy')">
           <div class="policy-card"><h2>{{ t('Personal data policy') }}</h2><p>{{ t('Policy text will be provided by the organizer.') }}</p><button type="button" class="kiosk-button kiosk-button--cut-left" @click="policyOpen = false"><span>{{ t('BACK') }}</span></button></div>
